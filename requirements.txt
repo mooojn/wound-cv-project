@@ -1,0 +1,20 @@
+# ── Core ────────────────────────────────────────────────────────────────────
+numpy>=1.23.0
+pandas>=1.5.0
+Pillow>=9.0.0
+opencv-python>=4.7.0
+scikit-learn>=1.2.0
+matplotlib>=3.6.0
+
+# ── Deep Learning ────────────────────────────────────────────────────────────
+torch>=2.0.0
+torchvision>=0.15.0
+
+# ── Object Detection (Week 3) ────────────────────────────────────────────────
+ultralytics>=8.0.0
+
+# ── Segmentation (Week 4) ────────────────────────────────────────────────────
+segmentation-models-pytorch>=0.3.0
+
+# ── Annotation tool (Week 1) — Tkinter is built into Python, no pip needed ──
+# tkinter  ← already included in standard Python distributions

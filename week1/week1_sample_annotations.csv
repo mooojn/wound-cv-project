@@ -1,0 +1,21 @@
+filename,pain_label,nips_score,num_boxes,au_labels,notes,image_width,image_height,annotated_at
+no_pain_001.jpg,no_pain,0,2,brow_bulge|eye_squeeze,Infant relaxed. Brows flat. Eyes barely closed.,224,224,2026-05-12T10:00:00
+no_pain_002.jpg,no_pain,0,1,open_lips,Mouth slightly open but no tension visible.,224,224,2026-05-12T10:03:00
+no_pain_003.jpg,no_pain,1,2,brow_bulge|nasolabial_furrow,Slight brow movement. Borderline no/mild.,224,224,2026-05-12T10:06:00
+no_pain_004.jpg,no_pain,0,1,eye_squeeze,Eyes closed — sleeping. No other pain cues.,224,224,2026-05-12T10:09:00
+no_pain_005.jpg,no_pain,0,0,,Face completely relaxed. No boxes needed.,224,224,2026-05-12T10:12:00
+mild_pain_001.jpg,mild_pain,2,3,brow_bulge|nasolabial_furrow|open_lips,Visible brow crease. Mild furrow. Lips parted.,224,224,2026-05-12T10:15:00
+mild_pain_002.jpg,mild_pain,2,2,brow_bulge|eye_squeeze,Forehead wrinkle present. Eyes squeezed slightly.,224,224,2026-05-12T10:18:00
+mild_pain_003.jpg,mild_pain,3,3,nasolabial_furrow|open_lips|taut_tongue,Nasolabial lines visible. Lips parted with taut tongue.,224,224,2026-05-12T10:21:00
+mild_pain_004.jpg,mild_pain,2,2,brow_bulge|open_lips,Mild brow bulge. Mouth open without stretch.,224,224,2026-05-12T10:24:00
+mild_pain_005.jpg,mild_pain,3,3,brow_bulge|nasolabial_furrow|eye_squeeze,Three AUs present. NIPS 3 borderline mild/moderate.,224,224,2026-05-12T10:27:00
+moderate_pain_001.jpg,moderate_pain,4,4,brow_bulge|eye_squeeze|nasolabial_furrow|open_lips,Four AUs active. Infant appears distressed.,224,224,2026-05-12T10:30:00
+moderate_pain_002.jpg,moderate_pain,4,3,brow_bulge|nasolabial_furrow|stretch_mouth,Mouth stretched wide. Clear pain face.,224,224,2026-05-12T10:33:00
+moderate_pain_003.jpg,moderate_pain,5,4,brow_bulge|eye_squeeze|open_lips|taut_tongue,NIPS 5. Taut tongue clearly visible.,224,224,2026-05-12T10:36:00
+moderate_pain_004.jpg,moderate_pain,4,4,brow_bulge|nasolabial_furrow|open_lips|stretch_mouth,Strong nasolabial and brow cues simultaneously.,224,224,2026-05-12T10:39:00
+moderate_pain_005.jpg,moderate_pain,4,3,eye_squeeze|nasolabial_furrow|open_lips,Eyes tightly shut. Mouth open wide.,224,224,2026-05-12T10:42:00
+severe_pain_001.jpg,severe_pain,6,5,brow_bulge|eye_squeeze|nasolabial_furrow|open_lips|stretch_mouth,Crying face. All 5 major AUs present. NIPS 6.,224,224,2026-05-12T10:45:00
+severe_pain_002.jpg,severe_pain,7,5,brow_bulge|eye_squeeze|nasolabial_furrow|stretch_mouth|taut_tongue,Maximum NIPS. Taut tongue with full stretch.,224,224,2026-05-12T10:48:00
+severe_pain_003.jpg,severe_pain,6,4,brow_bulge|nasolabial_furrow|stretch_mouth|taut_tongue,Infant crying. Deep nasolabial furrows.,224,224,2026-05-12T10:51:00
+severe_pain_004.jpg,severe_pain,7,5,brow_bulge|eye_squeeze|nasolabial_furrow|open_lips|stretch_mouth,Worst pain expression in batch. NIPS max.,224,224,2026-05-12T10:54:00
+severe_pain_005.jpg,severe_pain,6,4,brow_bulge|eye_squeeze|nasolabial_furrow|open_lips,Strong brow/eye/mouth cues all simultaneous.,224,224,2026-05-12T10:57:00

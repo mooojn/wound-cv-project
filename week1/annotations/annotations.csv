@@ -1,0 +1,21 @@
+image,class,severity,notes,box_count,boxes
+sample_01_normal.jpg,normal,0,Healthy foot,0,[]
+sample_02_miscellaneous.jpg,diabetic,4,Wound bed shows signs of infection.,1,"[{""coords"": [200, 150, 400, 350], ""region"": ""wound bed""}]"
+sample_03_miscellaneous.jpg,pressure,5,Stage 3 pressure ulcer on heel.,1,"[{""coords"": [150, 200, 450, 500], ""region"": ""wound bed""}]"
+sample_04_normal.jpg,normal,0,Healthy foot,0,[]
+sample_05_normal.jpg,normal,0,Healthy foot,0,[]
+sample_06_normal.jpg,normal,0,Healthy foot,0,[]
+sample_07_miscellaneous.jpg,venous,3,Venous ulcer with irregular margins.,2,"[{""coords"": [100, 100, 300, 300], ""region"": ""wound bed""}, {""coords"": [80, 80, 320, 320], ""region"": ""peri-wound""}]"
+sample_08_normal.jpg,normal,0,Healthy foot,0,[]
+sample_09_miscellaneous.jpg,trauma,2,Laceration from sharp object.,1,"[{""coords"": [250, 250, 350, 350], ""region"": ""wound bed""}]"
+sample_10_normal.jpg,normal,0,Healthy foot,0,[]
+sample_11_miscellaneous.jpg,surgical,1,Post-operative incision healing well.,1,"[{""coords"": [200, 50, 220, 500], ""region"": ""wound bed""}]"
+sample_12_miscellaneous.jpg,arterial,6,Arterial ulcer with punched-out appearance.,1,"[{""coords"": [300, 300, 400, 400], ""region"": ""wound bed""}]"
+sample_13_normal.jpg,normal,0,Healthy foot,0,[]
+sample_14_miscellaneous.jpg,cellulitis,2,Redness and swelling around ankle.,0,[]
+sample_15_miscellaneous.jpg,diabetic,7,Deep diabetic foot ulcer with necrosis.,1,"[{""coords"": [100, 100, 500, 500], ""region"": ""wound bed""}]"
+sample_16_normal.jpg,normal,0,Healthy foot,0,[]
+sample_17_miscellaneous.jpg,miscellaneous,3,Unidentified wound type.,1,"[{""coords"": [200, 200, 400, 400], ""region"": ""wound bed""}]"
+sample_18_normal.jpg,normal,0,Healthy foot,0,[]
+sample_19_normal.jpg,normal,0,Healthy foot,0,[]
+sample_20_miscellaneous.jpg,venous,4,Large venous ulcer with heavy exudate.,1,"[{""coords"": [50, 50, 550, 550], ""region"": ""wound bed""}]"

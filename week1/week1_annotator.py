@@ -1,358 +1,248 @@
-"""
-week1_dataset_clean.py
-======================
-Dataset cleaning and 20-sample selection for the Wound CV Project.
-
-Expected raw data layout (after downloading from Mendeley):
-    data/raw/Normal/          ← healthy feet images
-    data/raw/Wound_Main/      ← wound images, one sub-folder per class
-    data/raw/Wound_Masked/    ← corresponding segmentation masks
-
-Outputs:
-    data/cleaned/             ← cleaned, renamed, verified images
-    data/samples/             ← 20 representative images for annotation
-    data/cleaned/dataset_manifest.csv   ← full manifest of cleaned data
-    data/cleaned/sample_manifest.csv    ← manifest of the 20 samples
-"""
-
-import os
-import shutil
-import hashlib
-import random
-import csv
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+from PIL import Image, ImageTk
 import json
-import logging
+import csv
+import os
 from pathlib import Path
-from collections import defaultdict
+import argparse
 
-from PIL import Image
-import numpy as np
+class WoundAnnotator:
+    def __init__(self, root, image_dir):
+        self.root = root
+        self.root.title("🩹 Wound CV - Custom Annotation Tool (Week 1)")
+        self.root.geometry("1100x750")
+        
+        self.image_dir = Path(image_dir)
+        self.image_paths = sorted(list(self.image_dir.glob("*.jpg")))
+        if not self.image_paths:
+            messagebox.showerror("Error", f"No images found in {image_dir}")
+            self.root.destroy()
+            return
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
+        self.current_idx = 0
+        self.annotations = {} # image_name -> { boxes: [], type: str, severity: int, notes: str }
+        self.load_existing_annotations()
 
-RAW_DIR       = Path("data")
-CLEANED_DIR   = Path("data/cleaned")
-SAMPLES_DIR   = Path("data/samples")
+        # Canvas State
+        self.canvas_width = 600
+        self.canvas_height = 600
+        self.rect = None
+        self.start_x = None
+        self.start_y = None
+        self.cur_rects = [] # List of (canvas_id, coords)
 
-WOUND_MAIN    = RAW_DIR / "wound_main"
-WOUND_MASKED  = RAW_DIR / "wound_mask"
-NORMAL_DIR    = RAW_DIR / "Nomal"        
+        self.setup_ui()
+        self.load_image()
 
-TARGET_SIZE   = (331, 331)          # dataset native resolution
-SAMPLES_COUNT = 20                  # annotation quota for Week 1
-RANDOM_SEED   = 42
+    def setup_ui(self):
+        # Main Layout
+        self.main_frame = ttk.Frame(self.root, padding="10")
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
 
-WOUND_CLASSES = [
-    "diabetic", "pressure", "trauma", "venous",
-    "surgical", "arterial", "cellulitis", "miscellaneous"
-]
+        # Left: Canvas
+        self.canvas_frame = ttk.LabelFrame(self.main_frame, text=" Image View ", padding="5")
+        self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
+        self.canvas = tk.Canvas(self.canvas_frame, width=self.canvas_width, height=self.canvas_height, bg="gray20", cursor="cross")
+        self.canvas.pack(padx=5, pady=5)
+        
+        self.canvas.bind("<ButtonPress-1>", self.on_button_press)
+        self.canvas.bind("<B1-Motion>", self.on_move_press)
+        self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+        self.canvas.bind("<Button-3>", self.on_right_click) # Delete box
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
+        # Right: Controls
+        self.ctrl_frame = ttk.Frame(self.main_frame, padding="10", width=350)
+        self.ctrl_frame.pack(side=tk.RIGHT, fill=tk.Y)
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+        # Info
+        self.img_label = ttk.Label(self.ctrl_frame, text="Image: 0/0", font=("Arial", 10, "bold"))
+        self.img_label.pack(pady=5)
 
-def md5(path: Path) -> str:
-    """Return MD5 hex digest of a file (duplicate detection)."""
-    h = hashlib.md5()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        # Wound Type
+        ttk.Label(self.ctrl_frame, text="Wound Type:").pack(anchor=tk.W, pady=(10, 0))
+        self.wound_type = ttk.Combobox(self.ctrl_frame, values=[
+            "diabetic", "pressure", "trauma", "venous", 
+            "surgical", "arterial", "cellulitis", "miscellaneous", "normal"
+        ], state="readonly")
+        self.wound_type.pack(fill=tk.X, pady=5)
+        self.wound_type.set("miscellaneous")
 
+        # Action Region (for the current box being drawn)
+        ttk.Label(self.ctrl_frame, text="Action Region (last box):").pack(anchor=tk.W, pady=(10, 0))
+        self.region_var = ttk.Combobox(self.ctrl_frame, values=[
+            "wound bed", "peri-wound", "healthy margin"
+        ], state="readonly")
+        self.region_var.pack(fill=tk.X, pady=5)
+        self.region_var.set("wound bed")
 
-def is_valid_image(path: Path) -> tuple[bool, str]:
-    """
-    Open with Pillow and run basic sanity checks.
-    Returns (True, '') on success or (False, reason) on failure.
-    """
-    try:
-        with Image.open(path) as img:
-            img.verify()                        # catches truncated files
-        with Image.open(path) as img:
-            arr = np.array(img.convert("RGB"))
-            if arr.size == 0:
-                return False, "empty pixel array"
-            if arr.mean() < 2:
-                return False, "nearly all-black image"
-            if arr.mean() > 253:
-                return False, "nearly all-white image"
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)
+        # Severity
+        ttk.Label(self.ctrl_frame, text="Severity Score (0-7):").pack(anchor=tk.W, pady=(10, 0))
+        self.severity = ttk.Scale(self.ctrl_frame, from_=0, to=7, orient=tk.HORIZONTAL)
+        self.severity.pack(fill=tk.X, pady=5)
 
+        # Notes
+        ttk.Label(self.ctrl_frame, text="Clinical Notes:").pack(anchor=tk.W, pady=(10, 0))
+        self.notes = tk.Text(self.ctrl_frame, height=5, width=30)
+        self.notes.pack(pady=5)
 
-def clean_filename(original: str) -> str:
-    """Lower-case, replace spaces/special chars with underscores."""
-    stem = Path(original).stem
-    stem = stem.lower().replace(" ", "_")
-    # keep only alphanumeric, dash, underscore
-    stem = "".join(c if c.isalnum() or c in "-_" else "_" for c in stem)
-    return stem + ".jpg"
+        # Navigation
+        nav_frame = ttk.Frame(self.ctrl_frame)
+        nav_frame.pack(pady=20)
+        
+        ttk.Button(nav_frame, text="⬅ Prev", command=self.prev_image).pack(side=tk.LEFT, padx=5)
+        ttk.Button(nav_frame, text="Save & Next ➡", command=self.next_image).pack(side=tk.LEFT, padx=5)
 
-# ---------------------------------------------------------------------------
-# Step 1 — Collect all raw image paths with metadata
-# ---------------------------------------------------------------------------
+        # Export
+        ttk.Separator(self.ctrl_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
+        ttk.Button(self.ctrl_frame, text="Export CSV", command=self.export_csv).pack(fill=tk.X, pady=2)
+        ttk.Button(self.ctrl_frame, text="Export JSON (COCO)", command=self.export_json).pack(fill=tk.X, pady=2)
 
-def collect_raw_images() -> list[dict]:
-    """Walk raw directories and return a list of record dicts."""
-    records = []
+        # Status Bar
+        self.status = ttk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
+        self.status.pack(side=tk.BOTTOM, fill=tk.X)
 
-    # ── Wound images ────────────────────────────────────────────────────────
-    if WOUND_MAIN.exists():
-        for class_dir in sorted(WOUND_MAIN.iterdir()):
-            if not class_dir.is_dir():
-                continue
-            # normalise folder name → class label
-            label = class_dir.name.lower().strip()
-            # map partial matches to canonical class names
-            matched = next(
-                (c for c in WOUND_CLASSES if c in label),
-                "miscellaneous"
-            )
-            for img_path in sorted(class_dir.glob("*")):
-                if img_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}:
-                    records.append({
-                        "original_path": str(img_path),
-                        "label": matched,
-                        "split": "wound",
-                    })
-    else:
-        log.warning("Wound_Main directory not found: %s", WOUND_MAIN)
+    def load_image(self):
+        path = self.image_paths[self.current_idx]
+        self.img_label.config(text=f"Image: {self.current_idx + 1} / {len(self.image_paths)} | {path.name}")
+        
+        # Load and resize to fit canvas
+        self.pil_img = Image.open(path)
+        self.pil_img = self.pil_img.resize((self.canvas_width, self.canvas_height), Image.LANCZOS)
+        self.tk_img = ImageTk.PhotoImage(self.pil_img)
+        
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_img)
+        
+        # Clear/Load local state
+        self.cur_rects = []
+        img_name = path.name
+        if img_name in self.annotations:
+            data = self.annotations[img_name]
+            self.wound_type.set(data.get('type', 'miscellaneous'))
+            self.severity.set(data.get('severity', 0))
+            self.notes.delete("1.0", tk.END)
+            self.notes.insert("1.0", data.get('notes', ''))
+            
+            for box in data.get('boxes', []):
+                coords = box['coords']
+                rid = self.canvas.create_rectangle(coords[0], coords[1], coords[2], coords[3], outline="red", width=2)
+                self.cur_rects.append({'id': rid, 'coords': coords, 'region': box['region']})
+        else:
+            self.wound_type.set("miscellaneous")
+            self.severity.set(0)
+            self.notes.delete("1.0", tk.END)
 
-    # ── Normal (healthy) images ──────────────────────────────────────────────
-    if NORMAL_DIR.exists():
-        for img_path in sorted(NORMAL_DIR.glob("*")):
-            if img_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}:
-                records.append({
-                    "original_path": str(img_path),
-                    "label": "normal",
-                    "split": "normal",
+    def on_button_press(self, event):
+        self.start_x = event.x
+        self.start_y = event.y
+        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, 1, 1, outline="yellow", width=2)
+
+    def on_move_press(self, event):
+        cur_x, cur_y = (event.x, event.y)
+        self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+
+    def on_button_release(self, event):
+        end_x, end_y = (event.x, event.y)
+        coords = [self.start_x, self.start_y, end_x, end_y]
+        region = self.region_var.get()
+        self.canvas.itemconfig(self.rect, outline="red")
+        self.cur_rects.append({'id': self.rect, 'coords': coords, 'region': region})
+        self.status.config(text=f"Added box: {coords} as {region}")
+
+    def on_right_click(self, event):
+        # Delete closest box
+        item = self.canvas.find_closest(event.x, event.y)
+        if item:
+            for i, r in enumerate(self.cur_rects):
+                if r['id'] == item[0]:
+                    self.canvas.delete(item[0])
+                    self.cur_rects.pop(i)
+                    self.status.config(text="Box deleted")
+                    break
+
+    def save_current_state(self):
+        img_name = self.image_paths[self.current_idx].name
+        self.annotations[img_name] = {
+            'boxes': [{'coords': r['coords'], 'region': r['region']} for r in self.cur_rects],
+            'type': self.wound_type.get(),
+            'severity': int(self.severity.get()),
+            'notes': self.notes.get("1.0", "end-1c")
+        }
+        # Autosave to JSON
+        with open("week1/annotations/autosave.json", "w") as f:
+            json.dump(self.annotations, f, indent=4)
+
+    def next_image(self):
+        self.save_current_state()
+        if self.current_idx < len(self.image_paths) - 1:
+            self.current_idx += 1
+            self.load_image()
+        else:
+            messagebox.showinfo("Done", "All images in directory annotated!")
+
+    def prev_image(self):
+        self.save_current_state()
+        if self.current_idx > 0:
+            self.current_idx -= 1
+            self.load_image()
+
+    def load_existing_annotations(self):
+        os.makedirs("week1/annotations", exist_ok=True)
+        path = Path("week1/annotations/autosave.json")
+        if path.exists():
+            with open(path, "r") as f:
+                self.annotations = json.load(f)
+
+    def export_csv(self):
+        self.save_current_state()
+        out_path = "week1/annotations/annotations.csv"
+        with open(out_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["image", "class", "severity", "notes", "box_count", "boxes"])
+            for img, data in self.annotations.items():
+                writer.writerow([
+                    img, data['type'], data['severity'], data['notes'], 
+                    len(data['boxes']), json.dumps(data['boxes'])
+                ])
+        messagebox.showinfo("Exported", f"CSV saved to {out_path}")
+
+    def export_json(self):
+        self.save_current_state()
+        # Minimal COCO-ish export
+        coco = {
+            "images": [],
+            "annotations": [],
+            "categories": [{"id": i, "name": c} for i, c in enumerate(self.wound_type['values'])]
+        }
+        
+        ann_id = 1
+        for i, (img_name, data) in enumerate(self.annotations.items()):
+            coco["images"].append({"id": i, "file_name": img_name, "width": self.canvas_width, "height": self.canvas_height})
+            for box in data['boxes']:
+                x1, y1, x2, y2 = box['coords']
+                coco["annotations"].append({
+                    "id": ann_id,
+                    "image_id": i,
+                    "category_id": self.wound_type['values'].index(data['type']),
+                    "bbox": [x1, y1, x2-x1, y2-y1],
+                    "area": (x2-x1) * (y2-y1),
+                    "iscrowd": 0,
+                    "metadata": {"region": box['region'], "severity": data['severity']}
                 })
-    else:
-        log.warning("Normal directory not found: %s", NORMAL_DIR)
-
-    log.info("Collected %d raw files", len(records))
-    return records
-
-# ---------------------------------------------------------------------------
-# Step 2 — Validate + deduplicate + copy to cleaned/
-# ---------------------------------------------------------------------------
-
-def clean_dataset(records: list[dict]) -> list[dict]:
-    """
-    Validate each image, deduplicate by MD5, resize if needed,
-    copy to CLEANED_DIR/<label>/, and return cleaned record list.
-    """
-    CLEANED_DIR.mkdir(parents=True, exist_ok=True)
-
-    seen_hashes: set[str] = set()
-    cleaned: list[dict] = []
-    stats = defaultdict(int)
-
-    for rec in records:
-        src = Path(rec["original_path"])
-        label = rec["label"]
-
-        # ── Validate ────────────────────────────────────────────────────────
-        ok, reason = is_valid_image(src)
-        if not ok:
-            log.debug("SKIP (invalid) %s — %s", src.name, reason)
-            stats["invalid"] += 1
-            continue
-
-        # ── Deduplicate ─────────────────────────────────────────────────────
-        digest = md5(src)
-        if digest in seen_hashes:
-            log.debug("SKIP (duplicate) %s", src.name)
-            stats["duplicate"] += 1
-            continue
-        seen_hashes.add(digest)
-
-        # ── Destination ─────────────────────────────────────────────────────
-        dst_dir = CLEANED_DIR / label
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        dst_name = clean_filename(src.name)
-        # avoid name collision in same label folder
-        counter = 0
-        dst = dst_dir / dst_name
-        while dst.exists():
-            counter += 1
-            dst = dst_dir / (Path(dst_name).stem + f"_{counter}.jpg")
-
-        # ── Copy / resize ────────────────────────────────────────────────────
-        try:
-            with Image.open(src) as img:
-                img = img.convert("RGB")
-                if img.size != TARGET_SIZE:
-                    img = img.resize(TARGET_SIZE, Image.LANCZOS)
-                img.save(dst, "JPEG", quality=95)
-        except Exception as exc:
-            log.warning("SKIP (save error) %s — %s", src.name, exc)
-            stats["save_error"] += 1
-            continue
-
-        cleaned.append({
-            "original_path": str(src),
-            "cleaned_path":  str(dst),
-            "label":         label,
-            "split":         rec["split"],
-            "md5":           digest,
-            "width":         TARGET_SIZE[0],
-            "height":        TARGET_SIZE[1],
-        })
-        stats["kept"] += 1
-
-    log.info(
-        "Cleaning done — kept: %d | duplicates: %d | invalid: %d | errors: %d",
-        stats["kept"], stats["duplicate"], stats["invalid"], stats["save_error"]
-    )
-    return cleaned
-
-# ---------------------------------------------------------------------------
-# Step 3 — Save full manifest CSV
-# ---------------------------------------------------------------------------
-
-def save_manifest(records: list[dict], path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not records:
-        log.warning("No records to write to %s", path)
-        return
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=records[0].keys())
-        writer.writeheader()
-        writer.writerows(records)
-    log.info("Manifest saved → %s (%d rows)", path, len(records))
-
-# ---------------------------------------------------------------------------
-# Step 4 — Stratified sample of 20 images for annotation
-# ---------------------------------------------------------------------------
-
-def select_samples(cleaned: list[dict], n: int = SAMPLES_COUNT) -> list[dict]:
-    """
-    Pick ~equal images from each wound class (+ a few normal) so the
-    annotator sees a representative spread across all 8 wound types.
-    """
-    random.seed(RANDOM_SEED)
-
-    by_label: dict[str, list[dict]] = defaultdict(list)
-    for rec in cleaned:
-        by_label[rec["label"]].append(rec)
-
-    # All labels present in the cleaned set (wound classes + normal)
-    labels = sorted(by_label.keys())
-    per_label = max(1, n // len(labels))
-
-    selected: list[dict] = []
-    for label in labels:
-        pool = by_label[label]
-        k = min(per_label, len(pool))
-        selected.extend(random.sample(pool, k))
-
-    # If we still need more, fill from largest classes
-    if len(selected) < n:
-        all_remaining = [
-            r for r in cleaned if r not in selected
-        ]
-        random.shuffle(all_remaining)
-        selected.extend(all_remaining[: n - len(selected)])
-
-    selected = selected[:n]
-    random.shuffle(selected)
-
-    log.info(
-        "Selected %d samples — label distribution: %s",
-        len(selected),
-        {lbl: sum(1 for r in selected if r["label"] == lbl) for lbl in labels},
-    )
-    return selected
-
-# ---------------------------------------------------------------------------
-# Step 5 — Copy samples to data/samples/ and return updated records
-# ---------------------------------------------------------------------------
-
-def copy_samples(samples: list[dict]) -> list[dict]:
-    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-
-    updated = []
-    for i, rec in enumerate(samples, start=1):
-        src = Path(rec["cleaned_path"])
-        dst = SAMPLES_DIR / f"sample_{i:02d}_{rec['label']}.jpg"
-        shutil.copy2(src, dst)
-        updated.append({**rec, "sample_path": str(dst), "sample_id": i})
-
-    log.info("Samples copied → %s", SAMPLES_DIR)
-    return updated
-
-# ---------------------------------------------------------------------------
-# Step 6 — Print dataset statistics
-# ---------------------------------------------------------------------------
-
-def print_statistics(cleaned: list[dict]) -> None:
-    total = len(cleaned)
-    by_label: dict[str, int] = defaultdict(int)
-    for r in cleaned:
-        by_label[r["label"]] += 1
-
-    print("\n" + "=" * 60)
-    print(f"  DATASET STATISTICS  (total: {total} images)")
-    print("=" * 60)
-    for label in sorted(by_label):
-        bar = "█" * (by_label[label] * 30 // max(by_label.values()))
-        print(f"  {label:<18} {by_label[label]:>5}  {bar}")
-    print("=" * 60 + "\n")
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main() -> None:
-    log.info("━━━ Week 1 — Dataset Cleaning & Sample Selection ━━━")
-
-    # 1. Collect
-    raw = collect_raw_images()
-    if not raw:
-        log.error(
-            "No images found. Make sure data/raw/Wound_Main and data/raw/Normal exist."
-        )
-        return
-
-    # 2. Clean
-    cleaned = clean_dataset(raw)
-    if not cleaned:
-        log.error("No images survived cleaning. Check your raw data.")
-        return
-
-    # 3. Full manifest
-    save_manifest(cleaned, CLEANED_DIR / "dataset_manifest.csv")
-
-    # 4. Statistics
-    print_statistics(cleaned)
-
-    # 5. Stratified sample
-    samples = select_samples(cleaned, n=SAMPLES_COUNT)
-
-    # 6. Copy samples
-    samples = copy_samples(samples)
-
-    # 7. Sample manifest
-    save_manifest(samples, CLEANED_DIR / "sample_manifest.csv")
-
-    log.info("━━━ Week 1 cleaning complete ━━━")
-    log.info("Next step → python week1/week1_annotator.py --images data/samples")
-
+                ann_id += 1
+        
+        out_path = "week1/annotations/annotations.json"
+        with open(out_path, "w") as f:
+            json.dump(coco, f, indent=4)
+        messagebox.showinfo("Exported", f"JSON saved to {out_path}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--images", default="data/samples", help="Directory containing images")
+    args = parser.parse_args()
+
+    root = tk.Tk()
+    app = WoundAnnotator(root, args.images)
+    root.mainloop()

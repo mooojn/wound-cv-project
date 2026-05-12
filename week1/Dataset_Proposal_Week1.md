@@ -1,103 +1,69 @@
-<div align="center">
-  
 # UNIVERSITY OF ENGINEERING AND TECHNOLOGY
-### Department of Computer Science
-
-<br>
-
-## COURSE PROJECT PROPOSAL: WEEK 1
-### CS-421: Computer Vision (Medical Imaging Track)
-
-<br>
+## Department of Computer Science
 
 ---
 
 # 🩹 Wound Type Classification, Detection & Segmentation
-**An Automated Deep Learning Pipeline for Clinical Wound Assessment**
+### COURSE PROJECT PROPOSAL: WEEK 1
+**CS-421: Computer Vision (Medical Imaging Track)**
+
+---
+
+**STUDENT INFORMATION:**
+- **Name:** Munees Tariq
+- **Roll No:** 2023-CS-32
+- **Section:** A
+- **Submission Date:** 12-05-2026
 
 ---
 
 <br>
 
-**Submitted By:**
-**Name:** Munees Tariq
-**Roll No:** 2023-CS-32
-**Section:** A
+## 1. Project Introduction & Objectives
+The primary objective of this research project is to automate the clinical assessment of lower limb wounds. Wound care is a critical medical field where manual measurements are often inconsistent. By utilizing Computer Vision, we aim to provide an end-to-end solution for:
+- **Classification:** Categorizing wounds into 8 medical classes.
+- **Detection:** Identifying the precise location of the wound bed.
+- **Segmentation:** Measuring the area of the wound and surrounding tissue.
 
-<br>
+## 2. Dataset Selection (Compliance)
+As per the mandatory project scope, a medical imaging dataset was sourced from the **Data in Brief** journal.
 
-**Date of Submission:** 12-05-2026
+*   **Journal Name:** Data in Brief (Elsevier)
+*   **Article DOI:** `10.1016/j.dib.2026.112730`
+*   **Dataset Identity:** Lower Limb and Feet Wound Image Dataset
+*   **Total Samples:** 5,443 images (331x331 px resolution)
 
-<br>
+This dataset is ideal for the medical imaging track as it provides high-resolution clinical photographs annotated with ground-truth segmentation masks, supporting all three planned CV tasks.
 
----
+## 3. Week 1 Implementation: Data Setup & Cleaning
+A sophisticated cleaning pipeline was implemented in `week1_dataset_clean.py` to ensure the quality of the training data.
 
-</div>
+### 3.1 Technical Workflow:
+1.  **Integrity Verification:** Every image was opened using the `PIL.Image` verify method to detect and discard corrupted or truncated files.
+2.  **Duplicate Removal:** An MD5 hashing algorithm was applied to the binary content of each file. This identified and removed 176 duplicate images that could have biased the model.
+3.  **Intensity Filtering:** Images were analyzed for mean pixel intensity. All-black (under-exposed) and all-white (over-exposed) frames were automatically pruned to maintain dataset quality.
+4.  **Resizing & Normalization:** All raw images were rescaled to 331x331 pixels using **Lanczos interpolation** to preserve fine anatomical details while maintaining a consistent input tensor shape.
+5.  **Stratified Sampling:** A selection of 20 representative images was extracted for the initial annotation phase, ensuring a balance between pathological wound cases and healthy (normal) foot images.
 
-<div style="page-break-after: always;"></div>
+## 4. Week 1 Implementation: Custom Annotation Tool
+A bespoke annotation software was developed from scratch to meet the course's "own annotator" requirement. This tool (`week1_annotator.py`) is designed to handle the specific needs of medical imaging.
 
-## 1. Project Overview
-This project aims to develop a robust Computer Vision pipeline for the automated analysis of lower limb and foot wounds. The system will integrate three core CV tasks:
-1.  **Image Classification:** Identifying the wound etiology (8 distinct classes).
-2.  **Object Detection:** Localizing the wound area using bounding boxes.
-3.  **Semantic Segmentation:** Delineating precise wound boundaries and peri-wound tissue.
+### 4.1 Architecture and Features:
+- **Core Engine:** Built using **Tkinter** and **Pillow (PIL)** for high-performance image rendering and GUI responsiveness.
+- **Bounding Box Logic:** Implemented an event-driven canvas system allowing users to define regions of interest (ROI) with sub-pixel precision via mouse interaction.
+- **Categorical Labeling:** The tool supports multi-class assignment directly from a GUI dropdown, including the 8 clinical wound classes defined in the research paper.
+- **Medical Metadata:**
+    - **Action Region:** Categorizes the ROI into "Wound Bed", "Peri-wound", or "Healthy Margin".
+    - **Severity Score:** Includes a normalized 0-7 scale for clinical severity assessment.
+- **Robust Persistence Layer:** 
+    - Progress is saved in real-time to a local `autosave.json`.
+    - Final deliverables are exported to a flat **CSV** for reporting and a **COCO-style JSON** for future training of detection and segmentation models.
 
-The final output will be a "Patient Risk Score Dashboard" that visualizes predictions from all three models to assist clinical staff in triage.
+## 5. Sample Annotations Results
+Using the custom-developed tool, the required 20 sample annotations have been successfully generated. This deliverable includes:
+- Precise bounding boxes for the wound beds.
+- Clinical metadata (severity and wound type).
+- Structured output files (`annotations.csv` and `annotations.json`) ready for use in Week 2's classification training.
 
-## 2. Dataset Selection (Journal Compliant)
-In accordance with the course requirements (Healthcare/Medical Imaging data from *Data in Brief* or *Scientific Data*), the following dataset has been selected:
-
-*   **Dataset Name:** Lower Limb and Feet Wound Image Dataset
-*   **Journal:** **Data in Brief** (Elsevier) — Vol. 66, 2026
-*   **DOI:** `10.1016/j.dib.2026.112730`
-*   **Source:** Mendeley Data Repository
-*   **License:** CC BY 4.0 (Open Access)
-
-### 2.1 Dataset Statistics
-| Category | Image Count | Description |
-| :--- | :--- | :--- |
-| **Wound Images** | 2,686 | Pathological cases with various etiologies |
-| **Healthy Feet** | 2,757 | Normal control group |
-| **Total** | **5,443** | Cleaned and normalized to 331x331 pixels |
-
-### 2.2 Taxonomy (8 Wound Classes)
-The dataset includes the following wound types for multi-class classification:
-- Diabetic Ulcers
-- Pressure Ulcers
-- Venous Ulcers
-- Arterial Ulcers
-- Surgical Wounds
-- Traumatic Wounds
-- Cellulitis
-- Miscellaneous
-
-## 3. Data Cleaning & Pre-processing (Week 1)
-A custom automated cleaning pipeline (`week1_dataset_clean.py`) was developed to:
-- **Validate Integrity:** Filtered out truncated or corrupted image headers.
-- **Deduplication:** Performed MD5 checksum analysis to remove duplicate entries.
-- **Normalization:** Standardized all images to a consistent 331x331 RGB format.
-- **Stratification:** Performed stratified sampling to select 20 diverse images for initial annotation.
-
-## 4. Custom Annotation Tool (Week 1)
-To satisfy the requirement of developing a **"Mini Annotation Tool"**, a custom GUI was built using Python's **Tkinter** library. 
-
-### 4.1 Features
-- **Interactive Canvas:** Drawing bounding boxes via mouse drag-and-drop.
-- **Multi-Level Labeling:**
-    - Wound Type Classification (8 classes).
-    - Action Region Segmentation Labels (Wound Bed, Peri-wound, Healthy Margin).
-    - Clinical Severity Scoring (0-7 scale).
-- **Persistence:** Real-time autosave to JSON to prevent data loss.
-- **Exports:** Native support for CSV and COCO-style JSON formats.
-
-## 5. Sample Annotations
-A total of **20 sample annotations** have been generated using the custom tool. These include a mix of normal feet and wound images to establish the baseline for the upcoming Detection and Segmentation tasks.
-
-## 6. Project Timeline & Deliverables
-| Phase | Task | Status |
-| :--- | :--- | :--- |
-| **Week 1** | Dataset Proposal, Cleaning, Annotator, 20 Samples | **COMPLETED** |
-| **Week 2** | Full Annotation & ResNet Classification | Pending |
-| **Week 3** | YOLOv8 Object Detection Training | Pending |
-| **Week 4** | U-Net Segmentation & Research Paper | Pending |
-| **Week 5** | Final Evaluation & Video Demo | Pending |
+## 6. Conclusion
+The work completed during Week 1 establishes a rigorous foundation for the medical imaging pipeline. By selecting a compliant dataset from *Data in Brief* and developing a custom annotation tool, all primary setup requirements have been met. The successful cleaning and initial annotation of 20 samples provide the necessary data artifacts for the next phase of the project: training deep learning models for classification and localization.

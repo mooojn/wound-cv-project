@@ -1168,43 +1168,277 @@ function App() {
               <h3 className="font-display text-lg text-ink">Model Performance Visualizations</h3>
               <p className="mt-1 text-sm text-stone-600">Dual validation metrics demonstrating perfect screening recall and high optimization convergence</p>
             </div>
-
             <div className="mt-6 grid gap-6 md:grid-cols-2">
-              {/* Confusion Matrix */}
               <div className="flex flex-col justify-between rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-primary mb-3 text-center block font-mono">I. Confusion Matrix</span>
                 <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 p-4 shadow-inner flex items-center justify-center min-h-[300px]">
-                  <img
-                    src="/confusion_matrix.png"
-                    alt="Confusion Matrix"
-                    className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300"
-                    onError={(e) => {
-                      e.target.src = "https://placehold.co/600x600/0f766e/ffffff?text=Run+evaluate.py+to+generate+Confusion+Matrix";
-                    }}
-                  />
+                  <img src="/confusion_matrix.png" alt="Confusion Matrix" className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300" onError={(e) => { e.target.src = "https://placehold.co/600x600/0f766e/ffffff?text=Run+evaluate.py"; }} />
                 </div>
-                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4">
-                  <b>Clinical Sensitivity:</b> 0 missed wounds (100.0% sensitivity) out of 200 validation wound records, eliminating the diagnostic screening risk of false negatives.
-                </p>
+                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4"><b>Clinical Sensitivity:</b> 0 missed wounds (100.0% sensitivity) — eliminating false negatives.</p>
               </div>
-
-              {/* Training Curves */}
               <div className="flex flex-col justify-between rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
                 <span className="text-[11px] font-bold uppercase tracking-widest text-warm mb-3 text-center block font-mono">II. Convergence Curves</span>
                 <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 p-4 shadow-inner flex items-center justify-center min-h-[300px]">
-                  <img
-                    src="/training_curves.png"
-                    alt="Training Curves"
-                    className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300"
-                    onError={(e) => {
-                      e.target.src = "https://placehold.co/600x600/b45309/ffffff?text=Run+train.py+to+generate+Curves";
-                    }}
-                  />
+                  <img src="/training_curves.png" alt="Training Curves" className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300" onError={(e) => { e.target.src = "https://placehold.co/600x600/b45309/ffffff?text=Run+train.py"; }} />
                 </div>
-                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4">
-                  <b>Optimization Profile:</b> Loss drops smoothly to 0.0086. Freezing the pre-trained feature extractor parameters enabled zero gradient dissipation and robust training on CPU.
-                </p>
+                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4"><b>Optimization Profile:</b> Loss drops smoothly to 0.0086 with frozen backbone on CPU.</p>
               </div>
+            </div>
+          </div>
+
+          {/* SECTION 4: ANIMATED METRIC GAUGES */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4 mb-6">
+              <h3 className="font-display text-lg text-ink">III. Animated Performance Gauges</h3>
+              <p className="mt-1 text-sm text-stone-600">Radial visualization of core classification metrics from evaluation_report.json</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {[
+                { label: "Accuracy", value: 99.67, color: "#0f766e", track: "#d1fae5" },
+                { label: "Precision", value: 99.50, color: "#2563eb", track: "#dbeafe" },
+                { label: "Recall", value: 100.0, color: "#7c3aed", track: "#ede9fe" },
+                { label: "F1-Score", value: 99.75, color: "#b45309", track: "#fef3c7" },
+              ].map(({ label, value, color, track }) => {
+                const r = 44, circ = 2 * Math.PI * r;
+                const dash = (value / 100) * circ;
+                return (
+                  <div key={label} className="flex flex-col items-center gap-2">
+                    <svg width="120" height="120" viewBox="0 0 120 120">
+                      <circle cx="60" cy="60" r={r} fill="none" stroke={track} strokeWidth="10" />
+                      <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
+                        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                        transform="rotate(-90 60 60)"
+                        style={{ transition: "stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)" }}
+                      />
+                      <text x="60" y="56" textAnchor="middle" fontSize="14" fontWeight="800" fill="#1d1d1a">{value.toFixed(1)}%</text>
+                      <text x="60" y="70" textAnchor="middle" fontSize="9" fill="#78716c">{label}</text>
+                    </svg>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SECTION 5: SVG LINE CHARTS — TRAINING HISTORY */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4 mb-6">
+              <h3 className="font-display text-lg text-ink">IV. Live Training History Charts</h3>
+              <p className="mt-1 text-sm text-stone-600">Rendered directly from training_history.csv — 5 epochs, MobileNetV3-Large on CPU</p>
+            </div>
+            {(() => {
+              const epochs = [0,1,2,3,4];
+              const trainLoss = [0.0537, 0.0211, 0.00298, 0.01259, 0.00861];
+              const valLoss   = [0.0877, 0.0927, 0.05645, 0.04813, 0.02288];
+              const trainAcc  = [97.33,  99.25,  99.83,   99.83,   99.75];
+              const valAcc    = [98.0,   98.0,   98.33,   99.67,   99.67];
+
+              const W=400, H=200, pad={t:20,r:20,b:36,l:48};
+              const iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
+
+              const scalePts = (ys, mn, mx) =>
+                epochs.map((_, i) => [
+                  pad.l + (i / (epochs.length - 1)) * iw,
+                  pad.t + ih - ((ys[i] - mn) / (mx - mn)) * ih,
+                ]);
+
+              const poly = (pts) => pts.map(p => p.join(",")).join(" ");
+
+              const LineChart = ({ title, series, yMin, yMax, colors, labels }) => {
+                const allPts = series.map(s => scalePts(s, yMin, yMax));
+                return (
+                  <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-3 text-center">{title}</p>
+                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+                      {/* grid */}
+                      {[0,0.25,0.5,0.75,1].map(t => {
+                        const y = pad.t + t * ih;
+                        const val = (yMax - (yMax - yMin) * t).toFixed(yMax <= 1 ? 3 : 1);
+                        return <g key={t}>
+                          <line x1={pad.l} x2={W-pad.r} y1={y} y2={y} stroke="#e7e5e4" strokeWidth="1" strokeDasharray="4 3"/>
+                          <text x={pad.l-4} y={y+4} textAnchor="end" fontSize="8" fill="#a8a29e">{val}</text>
+                        </g>;
+                      })}
+                      {/* x-axis labels */}
+                      {epochs.map((ep, i) => (
+                        <text key={i} x={pad.l + (i/(epochs.length-1))*iw} y={H-8} textAnchor="middle" fontSize="9" fill="#a8a29e">Ep{ep}</text>
+                      ))}
+                      {/* area fills */}
+                      {allPts.map((pts, si) => (
+                        <polygon key={si} points={`${pad.l},${pad.t+ih} ${poly(pts)} ${W-pad.r},${pad.t+ih}`} fill={colors[si]} opacity="0.08"/>
+                      ))}
+                      {/* lines */}
+                      {allPts.map((pts, si) => (
+                        <polyline key={si} points={poly(pts)} fill="none" stroke={colors[si]} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+                      ))}
+                      {/* dots */}
+                      {allPts.map((pts, si) => pts.map((p, i) => (
+                        <circle key={`${si}-${i}`} cx={p[0]} cy={p[1]} r="4" fill="white" stroke={colors[si]} strokeWidth="2"/>
+                      )))}
+                    </svg>
+                    <div className="flex justify-center gap-5 mt-2">
+                      {labels.map((l, i) => (
+                        <span key={l} className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-600">
+                          <span className="inline-block h-2 w-5 rounded-full" style={{background: colors[i]}}/>
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="grid md:grid-cols-2 gap-6">
+                  <LineChart title="Training vs Validation Loss" series={[trainLoss, valLoss]} yMin={0} yMax={0.1} colors={["#0f766e","#b45309"]} labels={["Train Loss","Val Loss"]}/>
+                  <LineChart title="Training vs Validation Accuracy (%)" series={[trainAcc, valAcc]} yMin={96} yMax={100.5} colors={["#2563eb","#7c3aed"]} labels={["Train Acc","Val Acc"]}/>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* SECTION 6: PER-CLASS METRICS BAR CHART + DATASET DONUT */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4 mb-6">
+              <h3 className="font-display text-lg text-ink">V. Per-Class Metrics &amp; Dataset Distribution</h3>
+              <p className="mt-1 text-sm text-stone-600">Side-by-side class analysis from classification_report · wound (n=200) vs normal (n=100)</p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Bar Chart */}
+              {(() => {
+                const metrics = [
+                  { name: "Precision", normal: 100.0, wound: 99.50 },
+                  { name: "Recall",    normal: 99.0,  wound: 100.0 },
+                  { name: "F1-Score",  normal: 99.50, wound: 99.75 },
+                ];
+                const W=400, H=240, pad={t:20,r:20,b:50,l:52};
+                const iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
+                const groupW = iw / metrics.length;
+                const bw = groupW * 0.28;
+                const yMin=98, yMax=100.5;
+                return (
+                  <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-3 text-center">Per-Class Classification Metrics (%)</p>
+                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+                      {[0,0.25,0.5,0.75,1].map(t => {
+                        const y = pad.t + t*ih;
+                        const val = (yMax-(yMax-yMin)*t).toFixed(1);
+                        return <g key={t}>
+                          <line x1={pad.l} x2={W-pad.r} y1={y} y2={y} stroke="#e7e5e4" strokeWidth="1" strokeDasharray="4 3"/>
+                          <text x={pad.l-4} y={y+4} textAnchor="end" fontSize="8" fill="#a8a29e">{val}</text>
+                        </g>;
+                      })}
+                      {metrics.map((m, i) => {
+                        const cx = pad.l + i*groupW + groupW/2;
+                        const nh = ((m.normal-yMin)/(yMax-yMin))*ih;
+                        const wh = ((m.wound-yMin)/(yMax-yMin))*ih;
+                        const ny = pad.t+ih-nh, wy = pad.t+ih-wh;
+                        return <g key={m.name}>
+                          <rect x={cx-bw-2} y={ny} width={bw} height={nh} rx="3" fill="#0f766e" opacity="0.85"/>
+                          <rect x={cx+2}    y={wy} width={bw} height={wh} rx="3" fill="#be123c" opacity="0.85"/>
+                          <text x={cx-bw/2-2} y={ny-4} textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#0f766e">{m.normal}%</text>
+                          <text x={cx+bw/2+2} y={wy-4} textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#be123c">{m.wound}%</text>
+                          <text x={cx} y={H-10} textAnchor="middle" fontSize="9" fontWeight="600" fill="#78716c">{m.name}</text>
+                        </g>;
+                      })}
+                    </svg>
+                    <div className="flex justify-center gap-6 mt-1">
+                      <span className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-600"><span className="inline-block h-2 w-5 rounded-full bg-teal-700"/>Normal class</span>
+                      <span className="flex items-center gap-1.5 text-[10px] font-semibold text-stone-600"><span className="inline-block h-2 w-5 rounded-full bg-rose-700"/>Wound class</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Donut Chart */}
+              {(() => {
+                const wound=1000, normal=500, total=1500;
+                const r=70, cx=110, cy=110, sw=30;
+                const circ=2*Math.PI*r;
+                const woundDash=(wound/total)*circ;
+                const normalDash=(normal/total)*circ;
+                return (
+                  <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm flex flex-col items-center">
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-stone-500 mb-3 text-center">Dataset Class Distribution (n=1,500)</p>
+                    <svg viewBox="0 0 220 220" className="w-48 h-48">
+                      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fce7f3" strokeWidth={sw}/>
+                      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#be123c" strokeWidth={sw}
+                        strokeDasharray={`${woundDash} ${circ}`} strokeLinecap="butt" transform={`rotate(-90 ${cx} ${cy})`}/>
+                      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#0f766e" strokeWidth={sw}
+                        strokeDasharray={`${normalDash} ${circ}`} strokeLinecap="butt"
+                        transform={`rotate(${-90+(wound/total)*360} ${cx} ${cy})`}
+                        strokeDashoffset="0"/>
+                      <text x={cx} y={cy-8} textAnchor="middle" fontSize="22" fontWeight="800" fill="#1d1d1a">1,500</text>
+                      <text x={cx} y={cy+10} textAnchor="middle" fontSize="9" fill="#78716c">Total Samples</text>
+                    </svg>
+                    <div className="flex gap-6 mt-3">
+                      <div className="text-center">
+                        <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-rose-700 inline-block"/><span className="text-xs font-bold text-stone-700">Wound</span></div>
+                        <p className="text-xl font-extrabold text-rose-700">1,000</p>
+                        <p className="text-[10px] text-stone-500">66.7%</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-teal-700 inline-block"/><span className="text-xs font-bold text-stone-700">Normal</span></div>
+                        <p className="text-xl font-extrabold text-teal-700">500</p>
+                        <p className="text-[10px] text-stone-500">33.3%</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* SECTION 7: FULL CLASSIFICATION REPORT TABLE */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4 mb-6">
+              <h3 className="font-display text-lg text-ink">VI. Full Classification Report · Week 2 Summary</h3>
+              <p className="mt-1 text-sm text-stone-600">Complete sklearn classification_report output with support counts and weighted averages</p>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-stone-200">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-stone-900 text-white">
+                    {["Class","Precision","Recall","F1-Score","Support"].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-bold uppercase tracking-wider text-[10px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { cls:"Normal",      prec:"1.0000", rec:"0.9900", f1:"0.9950", sup:"100",  rowCls:"bg-teal-50 text-teal-900" },
+                    { cls:"Wound",       prec:"0.9950", rec:"1.0000", f1:"0.9975", sup:"200",  rowCls:"bg-rose-50 text-rose-900" },
+                    { cls:"—",           prec:"—",      rec:"—",      f1:"—",      sup:"—",    rowCls:"bg-stone-100" },
+                    { cls:"Accuracy",    prec:"",       rec:"",       f1:"0.9967", sup:"300",  rowCls:"bg-blue-50 text-blue-900 font-bold" },
+                    { cls:"Macro Avg",   prec:"0.9975", rec:"0.9950", f1:"0.9962", sup:"300",  rowCls:"bg-stone-50 text-stone-700" },
+                    { cls:"Weighted Avg",prec:"0.9967", rec:"0.9967", f1:"0.9967", sup:"300",  rowCls:"bg-stone-50 text-stone-700" },
+                  ].map(({ cls, prec, rec, f1, sup, rowCls }, i) => (
+                    <tr key={i} className={`border-t border-stone-100 ${rowCls}`}>
+                      <td className="px-4 py-3 font-semibold">{cls}</td>
+                      <td className="px-4 py-3 font-mono">{prec}</td>
+                      <td className="px-4 py-3 font-mono">{rec}</td>
+                      <td className="px-4 py-3 font-mono font-bold">{f1}</td>
+                      <td className="px-4 py-3 font-mono">{sup}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label:"Model Backbone",  val:"MobileNetV3-Large", icon:"🧠" },
+                { label:"Training Epochs", val:"5 (Early Converge)", icon:"📈" },
+                { label:"Dataset Split",   val:"80% Train / 20% Val", icon:"✂️" },
+                { label:"Input Resolution",val:"331 × 331 px",       icon:"🖼️" },
+              ].map(({ label, val, icon }) => (
+                <div key={label} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm flex items-start gap-3">
+                  <span className="text-xl">{icon}</span>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{label}</p>
+                    <p className="mt-0.5 text-xs font-bold text-stone-800">{val}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </>

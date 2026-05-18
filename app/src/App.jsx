@@ -35,6 +35,15 @@ const blankAnnotation = () => ({
 });
 
 function App() {
+  const WEEK_TABS = [
+    { key: "week1", label: "Week 1", topic: "Dataset + Annotator", state: "complete" },
+    { key: "week2", label: "Week 2", topic: "Annotation + Classification", state: "active" },
+    { key: "week3", label: "Week 3", topic: "Object Detection", state: "in_progress" },
+    { key: "week4", label: "Week 4", topic: "Segmentation + Paper", state: "coming_soon" },
+    { key: "week5", label: "Week 5", topic: "Final Evaluation + Video", state: "coming_soon" },
+  ];
+  const [activeWeek, setActiveWeek] = useState("week2");
+
   const [images, setImages] = useState([]);
   const [imageIdx, setImageIdx] = useState(0);
   const [annotations, setAnnotations] = useState({});
@@ -416,20 +425,89 @@ function App() {
       <header className="hero-panel mb-6 rounded-3xl border border-clay bg-card px-6 py-6 shadow-soft md:px-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
-            <p className="font-display text-xs uppercase tracking-[0.3em] text-warm">Custom Week 1 Annotator</p>
-            <h1 className="mt-2 font-display text-3xl text-ink md:text-4xl">Wound Annotation Studio</h1>
+            <p className="font-display text-xs uppercase tracking-[0.3em] text-warm">CV Project Dashboard</p>
+            <h1 className="mt-2 font-display text-3xl text-ink md:text-4xl">Medical Vision Workflow</h1>
             <p className="mt-2 max-w-3xl text-sm text-stone-700">
-              Clean workflow for medical image labeling with structured export for classification, detection, and segmentation stages.
+              Navigate each project week, run the current milestone, and track what is complete vs pending.
             </p>
           </div>
           <div className="rounded-2xl border border-stone-200 bg-white/80 px-4 py-3 text-xs text-stone-700">
-            <p className="font-semibold text-stone-900">Annotated Files</p>
-            <p className="mt-1 text-xl font-extrabold text-ink">{Object.keys(annotations).length}</p>
+            <p className="font-semibold text-stone-900">Current Week</p>
+            <p className="mt-1 text-xl font-extrabold text-ink">{WEEK_TABS.find((w) => w.key === activeWeek)?.label}</p>
           </div>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {WEEK_TABS.map((week) => {
+            const isActive = week.key === activeWeek;
+            const pillClass =
+              week.state === "complete"
+                ? "bg-emerald-100 text-emerald-700"
+                : week.state === "in_progress"
+                  ? "bg-amber-100 text-amber-700"
+                  : week.state === "active"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-stone-200 text-stone-700";
+            const pillText =
+              week.state === "complete"
+                ? "Complete"
+                : week.state === "in_progress"
+                  ? "In Progress"
+                  : week.state === "active"
+                    ? "Current"
+                    : "Coming Soon";
+            return (
+              <button
+                key={week.key}
+                type="button"
+                onClick={() => setActiveWeek(week.key)}
+                className={`rounded-2xl border px-3 py-2 text-left transition ${isActive ? "border-primary bg-primary/10" : "border-stone-200 bg-white hover:bg-stone-50"}`}
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-ink">{week.label}</p>
+                <p className="text-xs text-stone-600">{week.topic}</p>
+                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${pillClass}`}>
+                  {pillText}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </header>
 
-      <section className="grid gap-5 xl:grid-cols-[1.65fr_1fr]">
+      {activeWeek === "week2" && (
+        <section className="panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
+          <h2 className="font-display text-2xl text-ink">Week 2: Annotation and Classification</h2>
+          <p className="mt-2 text-sm text-stone-700">
+            Use this week to finalize labeled images and run classifier training + evaluation.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-stone-200 bg-paper p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-stone-500">Step 1</p>
+              <p className="mt-1 text-sm font-semibold text-stone-900">Prepare Dataset</p>
+              <p className="mt-1 text-xs text-stone-600">`python week2/prepare_week2_dataset.py`</p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-paper p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-stone-500">Step 2</p>
+              <p className="mt-1 text-sm font-semibold text-stone-900">Train Classifier</p>
+              <p className="mt-1 text-xs text-stone-600">`python week2/train_classifier.py --dataset_dir week2/dataset --output_dir week2/results`</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {(activeWeek === "week3" || activeWeek === "week4" || activeWeek === "week5") && (
+        <section className="panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
+          <h2 className="font-display text-2xl text-ink">
+            {activeWeek === "week3" ? "Week 3: Object Detection" : activeWeek === "week4" ? "Week 4: Segmentation + Paper" : "Week 5: Final Evaluation"}
+          </h2>
+          <p className="mt-2 text-sm text-stone-700">
+            {activeWeek === "week4"
+              ? "This module is in progress. Add segmentation training, metrics, and paper artifacts next."
+              : "This module is coming soon. You can keep preparing data and annotation quality now."}
+          </p>
+        </section>
+      )}
+
+      {activeWeek === "week1" && <section className="grid gap-5 xl:grid-cols-[1.65fr_1fr]">
         <article className="panel rounded-3xl border border-clay bg-card p-4 shadow-soft md:p-5">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <label className="btn-ghost inline-flex cursor-pointer items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-all hover:shadow-md">
@@ -720,16 +798,16 @@ function App() {
             </section>
           )}
         </aside>
-      </section>
+      </section>}
 
-      <section className="panel mt-5 rounded-2xl border border-clay bg-card p-4 shadow-soft">
+      {activeWeek === "week1" && <section className="panel mt-5 rounded-2xl border border-clay bg-card p-4 shadow-soft">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Saved File Preview</p>
         <pre className="max-h-56 overflow-auto rounded-xl bg-stone-950 p-3 text-xs text-stone-100">{autosaveText}</pre>
-      </section>
+      </section>}
 
-      <footer className="panel mt-5 rounded-2xl border border-clay bg-card px-4 py-3 text-sm text-stone-700 shadow-soft">{status}</footer>
+      {activeWeek === "week1" && <footer className="panel mt-5 rounded-2xl border border-clay bg-card px-4 py-3 text-sm text-stone-700 shadow-soft">{status}</footer>}
 
-      {toast && <div className="app-toast">{toast}</div>}
+      {activeWeek === "week1" && toast && <div className="app-toast">{toast}</div>}
     </main>
   );
 }

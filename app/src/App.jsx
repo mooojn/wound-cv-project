@@ -62,6 +62,15 @@ function App() {
   const [classificationError, setClassificationError] = useState(null);
   const [activeMetricTab, setActiveMetricTab] = useState("confusion");
 
+  // --- Week 2 Local Folder Batch Inspection States ---
+  const [folderInput, setFolderInput] = useState("");
+  const [batchImages, setBatchImages] = useState([]);
+  const [batchIndex, setBatchIndex] = useState(0);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState(null);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [batchLimit, setBatchLimit] = useState(30);
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -106,6 +115,135 @@ function App() {
     setPreviewUrl(null);
     setClassificationResult(null);
     setClassificationError(null);
+  };
+
+  const classifyRandomDatasetImage = async (classType) => {
+    setClassifying(true);
+    setClassificationResult(null);
+    setClassificationError(null);
+    
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/classify_random?class_type=${classType}`);
+      if (!response.ok) {
+        throw new Error("Failed to load random scan from backend.");
+      }
+      
+      const data = await response.json();
+      const formattedBase64 = `data:image/jpeg;base64,${data.image_data}`;
+      setPreviewUrl(formattedBase64);
+      setClassificationResult({
+        prediction: data.prediction,
+        confidence: data.confidence,
+        name: data.filename
+      });
+    } catch (err) {
+      setClassificationError(err.message || "Could not fetch a random dataset scan. Please verify Python app_server.py is running!");
+    } finally {
+      setClassifying(false);
+    }
+  };
+
+  const handleDirectorySelect = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const imageFiles = files.filter(f => 
+      f.type.startsWith("image/") || 
+      f.name.endsWith(".jpg") || 
+      f.name.endsWith(".jpeg") || 
+      f.name.endsWith(".png") ||
+      f.name.endsWith(".JPG") ||
+      f.name.endsWith(".JPEG") ||
+      f.name.endsWith(".PNG")
+    );
+
+    if (imageFiles.length === 0) {
+      setBatchError("No supported images (.jpg, .jpeg, .png) found inside the selected folder.");
+      return;
+    }
+
+    const limit = Math.min(imageFiles.length, batchLimit);
+    const selectedFiles = imageFiles.slice(0, limit);
+
+    const initialPlaceholders = selectedFiles.map(file => ({
+      name: file.name,
+      image_data: null,
+      prediction: null,
+      confidence: null,
+      loading: true
+    }));
+
+    setBatchError(null);
+    setBatchImages(initialPlaceholders);
+    setBatchIndex(0);
+    setBatchLoading(true);
+    setBatchProgress({ current: 0, total: selectedFiles.length });
+
+    const firstPath = selectedFiles[0].webkitRelativePath;
+    const folderName = firstPath ? firstPath.split("/")[0] : "Local Directory";
+    setFolderInput(folderName);
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+
+      try {
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = error => reject(error);
+        });
+
+        setBatchImages(prev => {
+          const copy = [...prev];
+          if (copy[i]) {
+            copy[i].image_data = base64Data;
+          }
+          return copy;
+        });
+
+        const formData = new FormData();
+        formData.append("image", file);
+
+        const response = await fetch("http://127.0.0.1:5000/classify", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error("Classification request failed.");
+        }
+
+        const resData = await response.json();
+        
+        setBatchImages(prev => {
+          const copy = [...prev];
+          if (copy[i]) {
+            copy[i].prediction = resData.prediction;
+            copy[i].confidence = resData.confidence;
+            copy[i].probabilities = resData.probabilities;
+            copy[i].loading = false;
+          }
+          return copy;
+        });
+
+      } catch (err) {
+        console.error(`Error processing ${file.name}:`, err);
+        setBatchImages(prev => {
+          const copy = [...prev];
+          if (copy[i]) {
+            copy[i].prediction = "error";
+            copy[i].confidence = 0;
+            copy[i].loading = false;
+          }
+          return copy;
+        });
+      } finally {
+        setBatchProgress(prev => ({ ...prev, current: i + 1 }));
+      }
+    }
+
+    setBatchLoading(false);
   };
 
   const frameRef = useRef(null);
@@ -528,255 +666,549 @@ function App() {
       </header>
 
       {activeWeek === "week2" && (
-        <section className="grid gap-6 lg:grid-cols-2">
-          {/* LEFT SIDE: METRICS AND VISUALIZATIONS */}
-          <div className="flex flex-col gap-6">
-            <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-display text-2xl text-ink">Week 2 Metrics Dashboard</h2>
-                  <p className="mt-1 text-sm text-stone-600">Model backbone: MobileNetV3-Large Transfer Learning</p>
-                </div>
-                <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 uppercase tracking-wider animate-pulse">
-                  Model Deployed
-                </span>
-              </div>
-              
-              {/* Metrics Grid */}
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Overall Accuracy</span>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-ink">99.67%</span>
-                    <span className="text-xs font-bold text-emerald-600">▲ 0.12%</span>
+        <>
+          {/* SECTION 1: METRICS DASHBOARD & LIVE CLASSIFIER SANDBOX */}
+          <section className="grid gap-6 lg:grid-cols-2">
+            {/* LEFT SIDE: METRICS DASHBOARD */}
+            <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display text-2xl text-ink">Week 2 Metrics Dashboard</h2>
+                    <p className="mt-1 text-sm text-stone-600">Model backbone: MobileNetV3-Large Transfer Learning</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-stone-500">299 / 300 correct splits</p>
+                  <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 uppercase tracking-wider animate-pulse">
+                    Model Deployed
+                  </span>
                 </div>
                 
-                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Wound Precision</span>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-ink">99.50%</span>
-                    <span className="text-xs font-semibold text-stone-500">Stable</span>
+                {/* Metrics Grid */}
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Overall Accuracy</span>
+                    <div className="mt-1 flex items-baseline gap-1">
+                      <span className="text-3xl font-extrabold text-ink">99.67%</span>
+                      <span className="text-xs font-bold text-emerald-600">▲ 0.12%</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-stone-500">299 / 300 correct splits</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-stone-500">Only 1 false alarm</p>
-                </div>
+                  
+                  <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Wound Precision</span>
+                    <div className="mt-1 flex items-baseline gap-1">
+                      <span className="text-3xl font-extrabold text-ink">99.50%</span>
+                      <span className="text-xs font-semibold text-stone-500">Stable</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-stone-500">Only 1 false alarm</p>
+                  </div>
 
-                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Wound Recall</span>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-emerald-700">100.0%</span>
-                    <span className="text-xs font-bold text-emerald-600">Perfect</span>
+                  <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Wound Recall</span>
+                    <div className="mt-1 flex items-baseline gap-1">
+                      <span className="text-3xl font-extrabold text-emerald-700">100.0%</span>
+                      <span className="text-xs font-bold text-emerald-600">Perfect</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-stone-500">0 false negatives (Clinical safe)</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-stone-500">0 false negatives (Clinical safe)</p>
-                </div>
 
-                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Balanced F1-Score</span>
-                  <div className="mt-1 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-ink">99.75%</span>
-                    <span className="text-xs font-bold text-emerald-600">Optimal</span>
+                  <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:shadow">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Balanced F1-Score</span>
+                    <div className="mt-1 flex items-baseline gap-1">
+                      <span className="text-3xl font-extrabold text-ink">99.75%</span>
+                      <span className="text-xs font-bold text-emerald-600">Optimal</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-stone-500">Robust binary balance</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-stone-500">Robust binary balance</p>
+                </div>
+              </div>
+
+              {/* Live Dataset Quick Loaders */}
+              <div className="mt-6 bg-paper border border-stone-200 rounded-2xl p-4 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-500 block mb-2.5">
+                  ⚡ Dataset Quick-Loaders (1-Click Run)
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    className="rounded-xl border border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50 p-3 text-left transition duration-200 shadow-sm flex items-center gap-3 group"
+                    onClick={() => classifyRandomDatasetImage("normal")}
+                    disabled={classifying}
+                  >
+                    <span className="text-2xl transition-transform group-hover:scale-110">🟢</span>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-800">Healthy Control</p>
+                      <p className="text-[9px] text-emerald-600 font-semibold mt-0.5">data/Nomal</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rounded-xl border border-red-200 bg-red-50/30 hover:bg-red-50 p-3 text-left transition duration-200 shadow-sm flex items-center gap-3 group"
+                    onClick={() => classifyRandomDatasetImage("wound")}
+                    disabled={classifying}
+                  >
+                    <span className="text-2xl transition-transform group-hover:scale-110">🚨</span>
+                    <div>
+                      <p className="text-xs font-bold text-red-800">Active Wound Scan</p>
+                      <p className="text-[9px] text-red-600 font-semibold mt-0.5">data/wound_main</p>
+                    </div>
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Visual Charts Card */}
-            <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft">
-              <div className="flex items-center justify-between border-b border-clay pb-4">
-                <h3 className="font-display text-lg text-ink">Performance Visualizations</h3>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMetricTab("confusion")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                      activeMetricTab === "confusion"
-                        ? "bg-primary text-white"
-                        : "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50"
-                    }`}
-                  >
-                    Confusion Matrix
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMetricTab("curves")}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                      activeMetricTab === "curves"
-                        ? "bg-primary text-white"
-                        : "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50"
-                    }`}
-                  >
-                    Training Curves
-                  </button>
-                </div>
+            {/* RIGHT SIDE: LIVE INFERENCE SANDBOX */}
+            <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft flex flex-col gap-5 justify-between">
+              <div>
+                <h2 className="font-display text-2xl text-ink">🔬 Live Classifier Sandbox</h2>
+                <p className="mt-1 text-sm text-stone-600">
+                  Upload a medical image to execute the trained MobileNetV3 model in real-time, or instantly load a random clinical scan from your patient folders!
+                </p>
               </div>
 
-              {/* Chart Panel */}
-              <div className="mt-5 flex flex-col items-center">
-                {activeMetricTab === "confusion" ? (
-                  <div className="w-full text-center">
-                    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-stone-100 p-2 shadow-inner">
-                      <img
-                        src="/confusion_matrix.png"
-                        alt="Confusion Matrix"
-                        className="mx-auto max-h-[340px] rounded-xl object-contain transition-transform hover:scale-105 duration-300"
-                        onError={(e) => {
-                          e.target.src = "https://placehold.co/600x600/0f766e/ffffff?text=Run+evaluate.py+to+generate+Confusion+Matrix";
-                        }}
-                      />
-                    </div>
-                    <p className="mt-3 text-xs text-stone-600 leading-relaxed italic">
-                      <b>Clinical Insight:</b> The confusion matrix displays 0 missed wounds (100% sensitivity) out of 200 validation wound samples, minimizing the critical risk of patients with ulcers being sent home undiagnosed.
-                    </p>
-                  </div>
+              {/* Upload Area / Image Preview */}
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-4 transition-all hover:bg-stone-100 relative">
+                {!previewUrl ? (
+                  <label className="flex flex-col items-center justify-center cursor-pointer text-center p-6 w-full h-full">
+                    <svg className="h-12 w-12 text-stone-400 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="mt-4 text-sm font-bold text-ink">Drag & drop or browse medical foot scans</p>
+                    <p className="mt-1 text-xs text-stone-500">Supports JPG, PNG (automatically resized to 331x331px)</p>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                  </label>
                 ) : (
-                  <div className="w-full text-center">
-                    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-stone-100 p-2 shadow-inner">
-                      <img
-                        src="/training_curves.png"
-                        alt="Training Curves"
-                        className="mx-auto max-h-[340px] rounded-xl object-contain transition-transform hover:scale-105 duration-300"
-                        onError={(e) => {
-                          e.target.src = "https://placehold.co/600x600/b45309/ffffff?text=Run+train.py+to+generate+Curves";
-                        }}
-                      />
+                  <div className="relative w-full h-full flex flex-col items-center">
+                    <div className="relative w-full max-h-[260px] overflow-hidden rounded-xl border border-stone-200 bg-white p-1 shadow-sm">
+                      <img src={previewUrl} alt="Sandbox Preview" className="mx-auto max-h-[240px] w-full object-contain rounded-lg" />
+                      {classifying && (
+                        <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+                          <svg className="animate-spin h-10 w-10 text-primary mb-3" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <p className="text-xs font-bold text-primary animate-pulse tracking-wider uppercase">Running Model Inference...</p>
+                          <span className="text-[10px] text-stone-500 mt-1">Normalizing tensor to ImageNet stats</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="mt-3 text-xs text-stone-600 leading-relaxed italic">
-                      <b>Optimization Insight:</b> Convergence shows rapid decrease of Cross-Entropy loss on the training split with smooth alignment on validation records. Freezing the MobileNet backbone allowed zero gradient dissipation.
-                    </p>
+                    
+                    {/* Results Display */}
+                    {classificationResult && (
+                      <div className="mt-4 w-full p-4 rounded-xl border-2 border-clay bg-white/95 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm text-left">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                            {classificationResult.name ? `File: ${classificationResult.name}` : "Prediction Outcome"}
+                          </span>
+                          <span className={`rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${
+                            classificationResult.prediction === "wound" 
+                              ? "bg-red-100 text-red-800 ring-2 ring-red-400 ring-offset-1 animate-pulse" 
+                              : "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-400 ring-offset-1"
+                          }`}>
+                            {classificationResult.prediction === "wound" ? "Wound" : "Normal"}
+                          </span>
+                        </div>
+
+                        {/* Confidence score bar */}
+                        <div className="mt-3">
+                          <div className="flex justify-between text-xs font-semibold mb-1">
+                            <span className="text-stone-700">Model Confidence:</span>
+                            <span className="text-ink font-bold">{(classificationResult.confidence * 100).toFixed(2)}%</span>
+                          </div>
+                          <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-1000 ${
+                                classificationResult.prediction === "wound" ? "bg-red-600" : "bg-emerald-600"
+                              }`}
+                              style={{ width: `${classificationResult.confidence * 100}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Clinical Recommendations */}
+                        <p className="mt-4 p-3 rounded-lg bg-accent-soft/30 border border-clay text-xs text-stone-700 leading-relaxed">
+                          {classificationResult.prediction === "wound" ? (
+                            <span>
+                              <b>🚨 Clinical Alert:</b> Active skin lesion / wound indicators detected. <b>Week 3 bounding box detector</b> and <b>Week 4 boundary segmenter</b> should be activated to locate bounding contours and map wound surface area.
+                            </span>
+                          ) : (
+                            <span>
+                              <b>🩺 Observation Clear:</b> The model classified the skin texture as healthy diabetic foot tissue with extremely high confidence. Patient monitoring protocol remains in baseline outpatient status.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Error Display */}
+                    {classificationError && (
+                      <div className="mt-4 w-full p-4 rounded-xl border border-red-200 bg-red-50 text-xs text-red-800 leading-relaxed shadow-sm text-left">
+                        <p className="font-bold mb-1">⚠️ Server Connection Offline</p>
+                        <p className="text-[11px] leading-relaxed">{classificationError}</p>
+                        <div className="mt-3 bg-white/70 p-2 rounded border border-red-100 text-[10px] text-stone-600 font-mono text-left">
+                          Run this in your terminal: <br />
+                          <span className="font-semibold text-ink">python week2/app_server.py</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sandbox Actions */}
+              <div className="flex gap-3">
+                {previewUrl ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-secondary flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl border border-stone-200 bg-white hover:bg-stone-50 transition"
+                      onClick={clearSandbox}
+                    >
+                      Clear Sandbox
+                    </button>
+                    {!classificationResult && !classificationError && (
+                      <button
+                        type="button"
+                        className="btn-primary flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl bg-primary text-white hover:bg-primary-dark transition shadow-md"
+                        onClick={classifySelectedImage}
+                        disabled={classifying}
+                      >
+                        {classifying ? "Computing..." : "Run Classifier"}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full text-center py-2 text-xs text-stone-500 leading-relaxed">
+                    💡 <b>Quick Test Tip:</b> Run your Python backend and click above to browse any image from the raw folders (e.g. <code>data/Nomal/</code> or <code>data/wound_main/</code>) to see immediate inference!
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* RIGHT SIDE: LIVE INFERENCE SANDBOX */}
-          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft flex flex-col gap-5 justify-between">
-            <div>
-              <h2 className="font-display text-2xl text-ink">🔬 Live Classifier Sandbox</h2>
-              <p className="mt-1 text-sm text-stone-600">
-                Upload a medical image to execute the trained MobileNetV3 model in real-time.
-              </p>
+          {/* SECTION 2: FULL WIDTH FOLDER BATCH INFERENCE INSPECTOR */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-display text-lg text-ink">📂 Folder Batch Inference Inspector</h3>
+                <p className="mt-1 text-xs text-stone-500">Scan any local workspace directory and fast-inspect predictions in a streamlined batch carousel</p>
+              </div>
+              
+              {/* Folder Path Input Panel & Limit Select */}
+              <div className="flex items-center gap-3 max-w-xl w-full">
+                {/* Limit Drop-down Select Combo Box */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="text-[11px] font-semibold text-stone-500">Limit:</span>
+                  <select
+                    className="rounded-xl border border-stone-300 bg-white px-2 py-1.5 text-xs font-semibold text-stone-700 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm cursor-pointer select-none"
+                    value={batchLimit}
+                    onChange={(e) => setBatchLimit(Number(e.target.value))}
+                    disabled={batchLoading}
+                  >
+                    <option value={10}>10 images</option>
+                    <option value={20}>20 images</option>
+                    <option value={30}>30 images</option>
+                    <option value={50}>50 images</option>
+                    <option value={100}>100 images</option>
+                  </select>
+                </div>
+
+                {/* Path Display */}
+                <div className="flex-1 flex items-center rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 text-xs font-mono text-stone-600 shadow-sm min-w-0">
+                  <span className="truncate">
+                    {folderInput ? `Selected: ${folderInput} (${batchImages.length} images)` : "No folder chosen yet"}
+                  </span>
+                </div>
+
+                {/* High-Contrast Folder Select Button */}
+                <label className="bg-stone-900 hover:bg-stone-800 text-white rounded-xl px-4 py-2.5 text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-2 whitespace-nowrap disabled:opacity-50 select-none">
+                  <span>📂 Choose Local Folder</span>
+                  <input
+                    type="file"
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                    onChange={handleDirectorySelect}
+                    disabled={batchLoading}
+                  />
+                </label>
+              </div>
             </div>
 
-            {/* Upload Area / Image Preview */}
-            <div className="flex-1 flex flex-col items-center justify-center min-h-[320px] rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-4 transition-all hover:bg-stone-100">
-              {!previewUrl ? (
-                <label className="flex flex-col items-center justify-center cursor-pointer text-center p-6 w-full h-full">
-                  <svg className="h-12 w-12 text-stone-400 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            {batchLoading && (
+              <div className="mt-4 p-3 rounded-xl bg-primary-soft/10 border border-primary/20 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2.5">
+                  <svg className="animate-spin h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <p className="mt-4 text-sm font-bold text-ink">Drag & drop or browse medical foot scans</p>
-                  <p className="mt-1 text-xs text-stone-500">Supports JPG, PNG (automatically resized to 331x331px)</p>
-                  <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-                </label>
-              ) : (
-                <div className="relative w-full h-full flex flex-col items-center">
-                  <div className="relative w-full max-h-[300px] overflow-hidden rounded-xl border border-stone-200 bg-white p-1 shadow-sm">
-                    <img src={previewUrl} alt="Sandbox Preview" className="mx-auto max-h-[280px] w-full object-contain rounded-lg" />
-                    {classifying && (
-                      <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center p-4">
-                        <svg className="animate-spin h-10 w-10 text-primary mb-3" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <p className="text-xs font-bold text-primary animate-pulse tracking-wider uppercase">Running Model Inference...</p>
-                        <span className="text-[10px] text-stone-500 mt-1">Normalizing tensor to ImageNet stats</span>
+                  <span className="font-bold text-primary animate-pulse uppercase tracking-wider">
+                    Analyzing Batch: {batchProgress.current} / {batchProgress.total} images classified
+                  </span>
+                </div>
+                <span className="text-[10px] text-stone-500 font-mono">Running CPU inference via Flask...</span>
+              </div>
+            )}
+
+            {batchError && (
+              <div className="mt-4 p-4 rounded-xl border border-red-200 bg-red-50 text-xs text-red-800 leading-relaxed shadow-sm">
+                <p className="font-bold mb-1">⚠️ Batch Loading Failed</p>
+                <p>{batchError}</p>
+                <p className="mt-2 text-[10px] text-stone-500">
+                  Tip: Make sure the selected folder contains valid image files (.jpg, .jpeg, or .png).
+                </p>
+              </div>
+            )}
+
+            {/* Interactive Carousel Viewer */}
+            {batchImages.length > 0 && (
+              <div className="mt-6 grid lg:grid-cols-5 gap-6">
+                
+                {/* Thumbnails Sidebar List (Left 2 Columns) */}
+                <div className="lg:col-span-2 rounded-2xl border border-stone-200 bg-stone-50 p-3 shadow-inner max-h-[420px] overflow-y-auto flex flex-col gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-stone-500 block mb-2 px-1">
+                    📋 Loaded Items ({batchImages.length} Images)
+                  </span>
+                  
+                  {batchImages.map((img, idx) => {
+                    if (img.loading) {
+                      return (
+                        <button
+                          key={img.name + idx}
+                          type="button"
+                          className={`w-full rounded-xl border p-2 text-left transition flex items-center gap-3 shadow-sm ${
+                            batchIndex === idx
+                              ? "bg-primary-soft/10 border-stone-300 ring-1 ring-primary-soft"
+                              : "bg-white border-stone-150"
+                          }`}
+                          onClick={() => setBatchIndex(idx)}
+                        >
+                          {/* Skeleton/Preview Thumbnail */}
+                          <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 bg-stone-100 flex-shrink-0 animate-pulse flex items-center justify-center">
+                            {img.image_data ? (
+                              <img src={img.image_data} alt="thumb" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-4 w-4 bg-stone-200 rounded-full" />
+                            )}
+                          </div>
+                          {/* Skeleton details */}
+                          <div className="min-w-0 flex-1 flex flex-col gap-1">
+                            <p className="text-[11px] font-semibold text-stone-500 truncate">{img.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="h-3.5 w-12 rounded bg-stone-200 animate-pulse" />
+                              <span className="h-3 w-8 rounded bg-stone-200 animate-pulse" />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    }
+
+                    // Otherwise show real completed data
+                    return (
+                      <button
+                        key={img.name + idx}
+                        type="button"
+                        className={`w-full rounded-xl border p-2 text-left transition flex items-center gap-3 shadow-sm ${
+                          batchIndex === idx
+                            ? "bg-primary-soft/30 border-primary ring-1 ring-primary"
+                            : "bg-white border-stone-200 hover:bg-stone-50"
+                        }`}
+                        onClick={() => setBatchIndex(idx)}
+                      >
+                        <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 bg-white flex-shrink-0">
+                          <img src={img.image_data} alt="thumb" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold text-ink truncate">{img.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-md ${
+                              img.prediction === "wound" 
+                                ? "bg-red-100 text-red-800 ring-1 ring-red-200" 
+                                : img.prediction === "normal"
+                                ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
+                                : "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
+                            }`}>
+                              {img.prediction === "wound" 
+                                ? "Wound" 
+                                : img.prediction === "normal"
+                                ? "Normal"
+                                : "Error"}
+                            </span>
+                            <span className="text-[9px] text-stone-500 font-medium">{(img.confidence * 100).toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Main Selected Image Viewer (Right 3 Columns) */}
+                <div className="lg:col-span-3 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm flex flex-col justify-between min-h-[400px]">
+                  
+                  {/* Title & Index Pagination */}
+                  <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wider text-stone-500">Active Batch Inspection</p>
+                      <p className="text-[11px] font-mono text-ink font-semibold truncate mt-0.5">{batchImages[batchIndex].name}</p>
+                    </div>
+                    <span className="text-xs font-bold text-stone-600 bg-stone-100 px-3 py-1 rounded-full whitespace-nowrap">
+                      {batchIndex + 1} of {batchImages.length}
+                    </span>
+                  </div>
+
+                  {/* High-res Image Display */}
+                  <div className="my-4 flex-1 flex items-center justify-center rounded-xl bg-stone-50 border border-stone-150 p-2 overflow-hidden relative min-h-[250px]">
+                    {batchImages[batchIndex].image_data ? (
+                      <img 
+                        src={batchImages[batchIndex].image_data} 
+                        alt="active-preview" 
+                        className="max-h-[240px] rounded-lg object-contain transition duration-200" 
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center animate-pulse gap-2">
+                        <div className="h-12 w-12 rounded bg-stone-200 flex items-center justify-center">
+                          <svg className="h-6 w-6 text-stone-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        </div>
+                        <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">Reading bytes...</p>
                       </div>
                     )}
-                  </div>
-                  
-                  {/* Results Display */}
-                  {classificationResult && (
-                    <div className="mt-4 w-full p-4 rounded-xl border-2 border-clay bg-white/95 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Prediction Outcome</span>
-                        <span className={`rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${
-                          classificationResult.prediction === "wound" 
-                            ? "bg-red-100 text-red-800 ring-2 ring-red-400 ring-offset-1 animate-pulse" 
-                            : "bg-emerald-100 text-emerald-800 ring-2 ring-emerald-400 ring-offset-1"
-                        }`}>
-                          {classificationResult.prediction === "wound" ? "⚠️ Wound Detected" : "✅ Healthy Foot"}
+                    
+                    {/* Prediction Overlay Badge */}
+                    <div className="absolute top-3 right-3">
+                      {batchImages[batchIndex].loading ? (
+                        <span className="rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-wider bg-stone-100 text-stone-500 shadow-md ring-2 ring-stone-200 ring-offset-1 animate-pulse flex items-center gap-1.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-stone-400 animate-ping" />
+                          Analyzing
                         </span>
-                      </div>
+                      ) : (
+                        <span className={`rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-wider shadow-md ring-2 ring-offset-1 ${
+                          batchImages[batchIndex].prediction === "wound" 
+                            ? "bg-red-100 text-red-800 ring-red-400" 
+                            : batchImages[batchIndex].prediction === "normal"
+                            ? "bg-emerald-100 text-emerald-800 ring-emerald-400"
+                            : "bg-amber-100 text-amber-800 ring-amber-400"
+                        }`}>
+                          {batchImages[batchIndex].prediction === "wound" 
+                            ? "Wound" 
+                            : batchImages[batchIndex].prediction === "normal"
+                            ? "Normal"
+                            : "Error"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      {/* Confidence score bar */}
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs font-semibold mb-1">
-                          <span className="text-stone-700">Model Confidence:</span>
-                          <span className="text-ink font-bold">{(classificationResult.confidence * 100).toFixed(2)}%</span>
+                  {/* Confidence Slider bar & Quick Stepper Controls */}
+                  <div>
+                    {batchImages[batchIndex].loading ? (
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold mb-2 text-stone-400 animate-pulse">
+                          <span>Classification Confidence:</span>
+                          <span>--%</span>
                         </div>
-                        <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden mb-5 animate-pulse">
+                          <div className="h-full bg-stone-200 w-1/3 rounded-full animate-ping" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold mb-2">
+                          <span className="text-stone-700">Classification Confidence:</span>
+                          <span className="text-ink font-bold font-mono">{(batchImages[batchIndex].confidence * 100).toFixed(2)}%</span>
+                        </div>
+                        <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden mb-5">
                           <div 
-                            className={`h-full transition-all duration-1000 ${
-                              classificationResult.prediction === "wound" ? "bg-red-600" : "bg-emerald-600"
+                            className={`h-full transition-all duration-300 ${
+                              batchImages[batchIndex].prediction === "wound" ? "bg-red-600" : "bg-emerald-600"
                             }`}
-                            style={{ width: `${classificationResult.confidence * 100}%` }}
+                            style={{ width: `${batchImages[batchIndex].confidence * 100}%` }}
                           />
                         </div>
                       </div>
+                    )}
 
-                      {/* Clinical Recommendations */}
-                      <p className="mt-4 p-3 rounded-lg bg-accent-soft/30 border border-clay text-xs text-stone-700 leading-relaxed">
-                        {classificationResult.prediction === "wound" ? (
-                          <span>
-                            <b>🚨 Clinical Alert:</b> Active skin lesion / diabetic ulcer indicators detected. <b>Week 3 bounding box detector</b> and <b>Week 4 boundary segmenter</b> should be activated to locate bounding contours and map wound surface area.
-                          </span>
-                        ) : (
-                          <span>
-                            <b>🩺 Observation Clear:</b> The model classified the skin texture as healthy diabetic foot tissue with extremely high confidence. Patient monitoring protocol remains in baseline outpatient status.
-                          </span>
-                        )}
-                      </p>
+                    {/* Stepper Controls */}
+                    <div className="flex gap-4">
+                      <button
+                        type="button"
+                        className="flex-1 py-2.5 text-xs font-bold uppercase rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 transition shadow-sm disabled:opacity-40"
+                        onClick={() => setBatchIndex(prev => Math.max(0, prev - 1))}
+                        disabled={batchIndex === 0}
+                      >
+                        ◀ Previous
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 py-2.5 text-xs font-bold uppercase rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 transition shadow-sm disabled:opacity-40"
+                        onClick={() => setBatchIndex(prev => Math.min(batchImages.length - 1, prev + 1))}
+                        disabled={batchIndex === batchImages.length - 1}
+                      >
+                        Next ▶
+                      </button>
                     </div>
-                  )}
-
-                  {/* Error Display */}
-                  {classificationError && (
-                    <div className="mt-4 w-full p-4 rounded-xl border border-red-200 bg-red-50 text-xs text-red-800 leading-relaxed shadow-sm">
-                      <p className="font-bold mb-1">⚠️ Server Connection Offline</p>
-                      <p className="text-[11px] leading-relaxed">{classificationError}</p>
-                      <div className="mt-3 bg-white/70 p-2 rounded border border-red-100 text-[10px] text-stone-600 font-mono text-left">
-                        Run this in your terminal: <br />
-                        <span className="font-semibold text-ink">python week2/app_server.py</span>
-                      </div>
-                    </div>
-                  )}
+                  </div>
+                  
                 </div>
-              )}
+              </div>
+            )}
+            
+            {batchImages.length === 0 && !batchLoading && !batchError && (
+              <div className="mt-4 p-8 rounded-2xl bg-stone-50 border border-stone-150 text-center text-xs text-stone-500">
+                💡 Select your batch size, click <b>Choose Local Folder</b> to pick a directory containing images, and watch them classify progressively and dynamically!
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 3: FULL WIDTH PERFORMANCE VISUALIZATIONS */}
+          <div className="rounded-3xl border border-clay bg-card p-6 shadow-soft mt-6">
+            <div className="border-b border-clay pb-4">
+              <h3 className="font-display text-lg text-ink">Model Performance Visualizations</h3>
+              <p className="mt-1 text-sm text-stone-600">Dual validation metrics demonstrating perfect screening recall and high optimization convergence</p>
             </div>
 
-            {/* Sandbox Actions */}
-            <div className="flex gap-3">
-              {previewUrl ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn-secondary flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl border border-stone-200 bg-white hover:bg-stone-50 transition"
-                    onClick={clearSandbox}
-                  >
-                    Clear Sandbox
-                  </button>
-                  {!classificationResult && !classificationError && (
-                    <button
-                      type="button"
-                      className="btn-primary flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl bg-primary text-white hover:bg-primary-dark transition shadow-md"
-                      onClick={classifySelectedImage}
-                      disabled={classifying}
-                    >
-                      {classifying ? "Computing..." : "Run Classifier"}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div className="w-full text-center py-2 text-xs text-stone-500 leading-relaxed">
-                  💡 <b>Quick Test Tip:</b> Run your Python backend and click above to browse any image from the raw folders (e.g. <code>data/Nomal/</code> or <code>data/wound_main/</code>) to see immediate inference!
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              {/* Confusion Matrix */}
+              <div className="flex flex-col justify-between rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-primary mb-3 text-center block font-mono">I. Confusion Matrix</span>
+                <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 p-4 shadow-inner flex items-center justify-center min-h-[300px]">
+                  <img
+                    src="/confusion_matrix.png"
+                    alt="Confusion Matrix"
+                    className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300"
+                    onError={(e) => {
+                      e.target.src = "https://placehold.co/600x600/0f766e/ffffff?text=Run+evaluate.py+to+generate+Confusion+Matrix";
+                    }}
+                  />
                 </div>
-              )}
+                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4">
+                  <b>Clinical Sensitivity:</b> 0 missed wounds (100.0% sensitivity) out of 200 validation wound records, eliminating the diagnostic screening risk of false negatives.
+                </p>
+              </div>
+
+              {/* Training Curves */}
+              <div className="flex flex-col justify-between rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-warm mb-3 text-center block font-mono">II. Convergence Curves</span>
+                <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 p-4 shadow-inner flex items-center justify-center min-h-[300px]">
+                  <img
+                    src="/training_curves.png"
+                    alt="Training Curves"
+                    className="mx-auto max-h-[360px] rounded-lg object-contain transition-transform hover:scale-[1.02] duration-300"
+                    onError={(e) => {
+                      e.target.src = "https://placehold.co/600x600/b45309/ffffff?text=Run+train.py+to+generate+Curves";
+                    }}
+                  />
+                </div>
+                <p className="mt-4 text-xs text-stone-600 leading-relaxed italic text-center px-4">
+                  <b>Optimization Profile:</b> Loss drops smoothly to 0.0086. Freezing the pre-trained feature extractor parameters enabled zero gradient dissipation and robust training on CPU.
+                </p>
+              </div>
             </div>
           </div>
-        </section>
+        </>
       )}
 
       {(activeWeek === "week3" || activeWeek === "week4" || activeWeek === "week5") && (

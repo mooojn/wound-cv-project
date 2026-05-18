@@ -254,6 +254,161 @@ def classify_image():
         log.error("Error running image classification: %s", str(e))
         return jsonify({"error": f"Failed to process image: {str(e)}"}), 500
 
+@app.route("/classify_random", methods=["GET"])
+def classify_random_image():
+    """Picks a random image from normal or wound folders, runs inference, and returns both the base64 image and results."""
+    if model is None:
+        init_model()
+        
+    class_type = request.args.get("class_type", "normal")
+    project_root = Path(__file__).parent.parent
+    
+    if class_type == "wound":
+        folder = project_root / "data" / "wound_main"
+    else:
+        folder = project_root / "data" / "Nomal"
+        
+    if not folder.exists():
+        return jsonify({"error": f"Directory not found: {folder}. Make sure your raw dataset folders exist!"}), 404
+        
+    import random
+    import base64
+    
+    # Locate all supported image formats
+    images = list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.jpeg"))
+    if not images:
+        return jsonify({"error": f"No clinical images found in {folder}"}), 404
+        
+    chosen_img_path = random.choice(images)
+    
+    try:
+        # Load and convert image to RGB
+        image = Image.open(chosen_img_path).convert("RGB")
+        
+        # Preprocess
+        tensor = transform(image).unsqueeze(0).to(device)
+        
+        # Run live model inference
+        with torch.no_grad():
+            outputs = model(tensor)
+            probabilities = torch.softmax(outputs, dim=1).squeeze(0)
+            
+        prob_normal = float(probabilities[0])
+        prob_wound = float(probabilities[1])
+        
+        predicted_class_idx = int(torch.argmax(probabilities))
+        class_names = ["normal", "wound"]
+        predicted_label = class_names[predicted_class_idx]
+        confidence = prob_wound if predicted_label == "wound" else prob_normal
+        
+        # Convert image bytes to Base64 data URL
+        with open(chosen_img_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+            
+        ext = chosen_img_path.suffix.lower().replace(".", "")
+        if ext not in ["jpg", "jpeg", "png"]:
+            ext = "jpeg"
+            
+        log.info("Classified random sample (%s): %s -> %s (%.2f%%)", class_type, chosen_img_path.name, predicted_label, confidence * 100)
+        
+        return jsonify({
+            "status": "success",
+            "name": chosen_img_path.name,
+            "image_data": f"data:image/{ext};base64,{encoded_string}",
+            "prediction": predicted_label,
+            "confidence": confidence,
+            "probabilities": {
+                "normal": prob_normal,
+                "wound": prob_wound
+            }
+        })
+        
+    except Exception as e:
+        log.error("Error executing random classification: %s", str(e))
+        return jsonify({"error": f"Failed to load random sample: {str(e)}"}), 500
+
+@app.route("/classify_folder", methods=["GET"])
+def classify_folder():
+    """Scans a local directory path for images, runs inference on the top 20-30, and returns their Base64 data and results."""
+    if model is None:
+        init_model()
+        
+    folder_path_str = request.args.get("folder_path", "").strip()
+    if not folder_path_str:
+        return jsonify({"error": "No folder path specified. Please enter a valid local directory path."}), 400
+        
+    project_root = Path(__file__).parent.parent
+    path = Path(folder_path_str)
+    if not path.is_absolute():
+        path = project_root / path
+        
+    if not path.exists() or not path.is_dir():
+        return jsonify({"error": f"Directory not found: {folder_path_str}. Please verify that the path is correct and accessible."}), 404
+        
+    import base64
+    
+    # Supported image extensions
+    extensions = ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]
+    image_paths = []
+    for ext in extensions:
+        image_paths.extend(list(path.glob(ext)))
+        
+    # Remove duplicates and sort to ensure ordered navigation
+    image_paths = sorted(list(set(image_paths)))
+    
+    if not image_paths:
+        return jsonify({"error": f"No supported images (.jpg, .jpeg, .png) found inside folder: {folder_path_str}"}), 404
+        
+    # Limit to top 30 images
+    limit = min(len(image_paths), 30)
+    selected_paths = image_paths[:limit]
+    
+    results = []
+    for img_path in selected_paths:
+        try:
+            image = Image.open(img_path).convert("RGB")
+            tensor = transform(image).unsqueeze(0).to(device)
+            
+            with torch.no_grad():
+                outputs = model(tensor)
+                probabilities = torch.softmax(outputs, dim=1).squeeze(0)
+                
+            prob_normal = float(probabilities[0])
+            prob_wound = float(probabilities[1])
+            
+            predicted_class_idx = int(torch.argmax(probabilities))
+            class_names = ["normal", "wound"]
+            predicted_label = class_names[predicted_class_idx]
+            confidence = prob_wound if predicted_label == "wound" else prob_normal
+            
+            with open(img_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+                
+            ext = img_path.suffix.lower().replace(".", "")
+            if ext not in ["jpg", "jpeg", "png"]:
+                ext = "jpeg"
+                
+            results.append({
+                "name": img_path.name,
+                "image_data": f"data:image/{ext};base64,{encoded_string}",
+                "prediction": predicted_label,
+                "confidence": confidence,
+                "probabilities": {
+                    "normal": prob_normal,
+                    "wound": prob_wound
+                }
+            })
+        except Exception as e:
+            log.warning("Skipping corrupted image file %s: %s", img_path.name, str(e))
+            
+    return jsonify({
+        "status": "success",
+        "folder_path": str(path),
+        "total_available": len(image_paths),
+        "loaded_count": len(results),
+        "images": results
+    })
+
 # ---------------------------------------------------------------------------
 # Server Startup
 # ---------------------------------------------------------------------------

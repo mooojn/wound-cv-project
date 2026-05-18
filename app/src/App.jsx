@@ -129,12 +129,11 @@ function App() {
       }
       
       const data = await response.json();
-      const formattedBase64 = `data:image/jpeg;base64,${data.image_data}`;
-      setPreviewUrl(formattedBase64);
+      setPreviewUrl(data.image_data);
       setClassificationResult({
         prediction: data.prediction,
         confidence: data.confidence,
-        name: data.filename
+        name: data.name
       });
     } catch (err) {
       setClassificationError(err.message || "Could not fetch a random dataset scan. Please verify Python app_server.py is running!");

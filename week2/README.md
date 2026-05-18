@@ -9,15 +9,19 @@ This repository implements a lightweight, high-performance deep transfer learnin
 ```markdown
 week2/
 ├── weights/
-│   └── best_classifier.pth     # Trained MobileNetV3-Large model weights checkpoint
+│   └── best_classifier.pth     # Trained MobileNetV3-Large weights checkpoint
 ├── metrics/
-│   ├── confusion_matrix.png    # Graphical breakdown of classification sensitivity
-│   └── training_curves.png     # Loss convergence & validation accuracy tracking curves
-├── app_server.py                # Flask CPU inference API server (Port 5000)
-├── dataset.py                  # PyTorch custom dataset class & data loader pipeline
-├── train.py                    # Transfer learning training script with augmentations
-├── evaluate.py                 # Stratified model evaluation & metric generation script
-├── prepare_dataset.py          # Automates raw dataset downloading & preprocessing
+│   ├── confusion_matrix.png    # Graphical breakdown of validation split predictions
+│   ├── training_curves.png     # Loss convergence & validation accuracy tracking curves
+│   ├── training_history.csv    # Epoched training metrics CSV log
+│   └── evaluation_report.json  # Stored accuracy, precision, and recall scores
+├── app_server.py               # Flask CPU inference API server (Port 5000)
+├── dataset.py                  # PyTorch custom dataset class & transforms pipeline
+├── model.py                    # Transfer learning architecture factory definition
+├── train.py                    # Model training loop script with augmentations
+├── evaluate.py                 # Generates metrics, report JSON & Confusion Matrix
+├── prepare_dataset.py          # Preprocesses raw clinical scans using Lanczos
+├── run_pipeline.py             # Automates end-to-end dataset prep, training, and eval
 └── README.md                   # This documentation file
 ```
 

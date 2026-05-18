@@ -10,6 +10,7 @@ Modern light-theme wound annotation tool built with React and Tailwind CSS.
 - Navigate images with Prev and Save and Next
 - Autosave annotation state in browser local storage
 - Export annotations to CSV and COCO-style JSON
+- Save annotated images as PNG downloads (store them in the local annotated/ folder)
 
 ## Run
 

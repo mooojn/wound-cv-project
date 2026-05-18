@@ -8,16 +8,16 @@ This repository implements a lightweight, high-performance deep transfer learnin
 
 ```markdown
 week2/
-├── metrics/                # Contains generated validation confusion matrix & convergence plots
-├── weights/                # Holds the trained model weights check-point (best_classifier.pth)
-├── app_server.py           # Flask CPU inference API server (Port 5000)
-├── dataset.py              # PyTorch custom dataset class & transforms pipeline
-├── evaluate.py             # Generates metrics, report JSON & validation plots
-├── model.py                # Transfer learning model factory (ResNet18 / MobileNetV3)
-├── prepare_dataset.py      # Automates raw dataset downloading & Lanczos 331x331px preprocessing
-├── README.md               # This documentation file
-├── run_pipeline.py         # Orchestrates the end-to-end dataset prep, training, and evaluation
-└── train.py                # Model training loop script with augmentations
+├── metrics/                # Evaluation plots and training history logs
+├── weights/                # Saved best model checkpoint (.pth)
+├── app_server.py           # Flask CPU inference server (Port 5000)
+├── dataset.py              # PyTorch custom dataset & loaders
+├── evaluate.py             # Script to evaluate model & output metrics
+├── model.py                # Model factory (ResNet18 / MobileNetV3)
+├── prepare_dataset.py      # Resizes raw images to 331x331px
+├── README.md               # Documentation file (This file)
+├── run_pipeline.py         # Runs dataset prep, train, and eval in one go
+└── train.py                # Model training script with augmentation
 ```
 
 ---
@@ -90,31 +90,68 @@ The frontend application provides a stunning clinical interface to run live loca
 
 ---
 
-## 🚀 How To Run The Application
+## 🚀 How to Setup and Run from Scratch
 
-### Prerequisites:
-Make sure you have your dependencies installed inside a virtual environment:
+If you are setting up the Week 2 classification workspace from scratch, follow this sequential execution pipeline:
+
+### 1. Environment Setup
+Create a virtual environment and install all dependencies:
 ```bash
+# Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Install requirements
 pip install -r requirements.txt
 ```
 
-### 1-Click Dual App Launch:
-Double-click the **`start_week2_app.bat`** file located in the project root. This orchestrates:
-1. Running the **Flask API server** (`week2/app_server.py`) in the background on port `5000`.
-2. Launching the **React Vite development server** on port `5173`.
-3. Automatically opening your default web browser to the interactive dashboard.
-
-### Manual Launching:
-If you prefer running the processes manually, launch two separate terminal shells:
-
-**Terminal 1 (Flask API Server):**
+### 2. Prepare & Clean the Dataset
+Run `prepare_dataset.py` to crop/resize the raw dataset images to `331x331` pixels using Lanczos interpolation and generate the stratified manifest CSV:
 ```bash
-python week2/app_server.py
+python week2/prepare_dataset.py
+```
+*Outputs: Preprocessed images inside `data/cleaned_week2/` and manifest file `data/cleaned_week2/annotated_manifest_week2.csv`.*
+
+### 3. Train the MobileNetV3 Model
+Train the customized classification head using frozen feature extractors. The script automatically saves the optimal weights and plots training history curves:
+```bash
+python week2/train.py --epochs 10 --batch-size 32 --device cpu
+```
+*Outputs: Trained checkpoint `week2/weights/best_classifier.pth` and `week2/metrics/training_curves.png`.*
+
+### 4. Evaluate and Generate Metrics
+Generate stratified precision, recall, and F1-score evaluation metrics and plot the clinical Confusion Matrix:
+```bash
+python week2/evaluate.py --device cpu
+```
+*Outputs: Validation metrics at `week2/metrics/evaluation_report.json` and `week2/metrics/confusion_matrix.png`.*
+
+---
+
+### 💡 Shortcut: Run the End-to-End Pipeline
+To automate steps 2, 3, and 4 in one single command, run the orchestrated pipeline runner:
+```bash
+python week2/run_pipeline.py
 ```
 
-**Terminal 2 (React Frontend Web App):**
-```bash
-cd app
-npm run dev
-```
-Navigate to `http://localhost:5173/` in your browser.
+---
+
+### 5. Launch the Web Application
+To load the interactive sandbox dashboard and folder batch inspector:
+
+* **1-Click Dual Launch (Recommended):**  
+  Double-click the **`start_week2_app.bat`** file in the project root. This automatically fires up the Flask API server (`http://127.0.0.1:5000`), spins up the Vite local frontend (`http://localhost:5173`), and opens your default browser.
+
+* **Manual Launch:**  
+  Start the servers in two separate terminals:
+  
+  **Terminal 1 (Flask API Server):**
+  ```bash
+  python week2/app_server.py
+  ```
+  
+  **Terminal 2 (React Frontend Web App):**
+  ```bash
+  cd app
+  npm run dev
+  ```

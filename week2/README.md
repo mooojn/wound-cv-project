@@ -1,4 +1,4 @@
-# Week 2 - Clinical Image Classification Pipeline
+K# Week 2 - Clinical Image Classification Pipeline
 
 This module implements the Week 2 classification task for clinical foot scans. The model predicts two classes:
 - `wound`

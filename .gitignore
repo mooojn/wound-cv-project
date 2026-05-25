@@ -3,3 +3,14 @@ week1/annotator-web/node_modules/
 week1/annotator-web/dist/
 manual.docx
 *.pyc
+.venv/
+.venv-gpu/
+
+# Week 3 large artifacts
+week3/data/
+week3/runs/
+week3/results/predictions/
+week3/results/eval_*/
+week3/results/val_*/
+runs/
+*.jpg

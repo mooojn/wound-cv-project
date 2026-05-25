@@ -1,0 +1,14 @@
+{
+  "total_samples": 2673,
+  "split_counts": {
+    "train": 1871,
+    "val": 534,
+    "test": 268
+  },
+  "class_counts": {
+    "wound": 2673
+  },
+  "images_dir": "C:\\Users\\Laptop Solutions\\Desktop\\wound-cv-project\\week3\\data\\images",
+  "labels_dir": "C:\\Users\\Laptop Solutions\\Desktop\\wound-cv-project\\week3\\data\\labels",
+  "manifest": "C:\\Users\\Laptop Solutions\\Desktop\\wound-cv-project\\week3\\data\\dataset_manifest.csv"
+}

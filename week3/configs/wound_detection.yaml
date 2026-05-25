@@ -1,0 +1,6 @@
+path: week3/data
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: wound

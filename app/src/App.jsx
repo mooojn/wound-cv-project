@@ -37,12 +37,12 @@ const blankAnnotation = () => ({
 function App() {
   const WEEK_TABS = [
     { key: "week1", label: "Week 1", topic: "Dataset + Annotator", state: "complete" },
-    { key: "week2", label: "Week 2", topic: "Annotation + Classification", state: "active" },
-    { key: "week3", label: "Week 3", topic: "Object Detection", state: "in_progress" },
-    { key: "week4", label: "Week 4", topic: "Segmentation + Paper", state: "coming_soon" },
+    { key: "week2", label: "Week 2", topic: "Annotation + Classification", state: "complete" },
+    { key: "week3", label: "Week 3", topic: "Object Detection", state: "complete" },
+    { key: "week4", label: "Week 4", topic: "Segmentation + Paper", state: "active" },
     { key: "week5", label: "Week 5", topic: "Final Evaluation + Video", state: "coming_soon" },
   ];
-  const [activeWeek, setActiveWeek] = useState("week2");
+  const [activeWeek, setActiveWeek] = useState("week4");
 
   const [images, setImages] = useState([]);
   const [imageIdx, setImageIdx] = useState(0);
@@ -70,6 +70,20 @@ function App() {
   const [batchError, setBatchError] = useState(null);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [batchLimit, setBatchLimit] = useState(30);
+  const [week3Metrics, setWeek3Metrics] = useState([]);
+  const [week3Predictions, setWeek3Predictions] = useState([]);
+  const [week3Graphs, setWeek3Graphs] = useState({ eval_val: [], eval_test: [] });
+  const [week3Health, setWeek3Health] = useState(null);
+  const [week3HealthError, setWeek3HealthError] = useState(null);
+  const [week3DetectFile, setWeek3DetectFile] = useState(null);
+  const [week3DetectPreview, setWeek3DetectPreview] = useState(null);
+  const [week3DetectResultImage, setWeek3DetectResultImage] = useState(null);
+  const [week3Detections, setWeek3Detections] = useState([]);
+  const [week3DetectError, setWeek3DetectError] = useState(null);
+  const [week3Detecting, setWeek3Detecting] = useState(false);
+  const [week3Conf, setWeek3Conf] = useState(0.25);
+  const WEEK3_CONF_OPTIONS = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5];
+  const WEEK3_API = "http://127.0.0.1:5001";
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -269,6 +283,92 @@ function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    const loadWeek3Assets = async () => {
+      try {
+        const [healthRes, metricsRes, predsRes, graphsRes] = await Promise.allSettled([
+          fetch(`${WEEK3_API}/week3/health`),
+          fetch(`${WEEK3_API}/week3/summary`),
+          fetch(`${WEEK3_API}/week3/predictions?limit=24`),
+          fetch(`${WEEK3_API}/week3/graphs`),
+        ]);
+
+        if (healthRes.status === "fulfilled" && healthRes.value.ok) {
+          const health = await healthRes.value.json();
+          setWeek3Health(health);
+          setWeek3HealthError(null);
+        } else {
+          setWeek3Health(null);
+          setWeek3HealthError("Week 3 backend offline");
+        }
+
+        if (metricsRes.status === "fulfilled" && metricsRes.value.ok) {
+          const metrics = await metricsRes.value.json();
+          const normalized = Array.isArray(metrics?.rows)
+            ? metrics.rows
+            : Array.isArray(metrics)
+              ? metrics
+              : [];
+          setWeek3Metrics(normalized);
+        }
+
+        if (predsRes.status === "fulfilled" && predsRes.value.ok) {
+          const preds = await predsRes.value.json();
+          const items = Array.isArray(preds?.images) ? preds.images : [];
+          setWeek3Predictions(items.map((p) => `${WEEK3_API}${p}`));
+        }
+
+        if (graphsRes.status === "fulfilled" && graphsRes.value.ok) {
+          const graphData = await graphsRes.value.json();
+          setWeek3Graphs({
+            eval_val: (graphData.eval_val ?? []).map((p) => `${WEEK3_API}${p}`),
+            eval_test: (graphData.eval_test ?? []).map((p) => `${WEEK3_API}${p}`),
+          });
+        }
+      } catch (err) {
+        console.error("Week 3 backend not reachable:", err);
+        setWeek3Health(null);
+        setWeek3HealthError("Week 3 backend offline");
+      }
+    };
+    loadWeek3Assets();
+  }, [WEEK3_API]);
+
+  const handleWeek3FileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setWeek3DetectFile(file);
+    setWeek3DetectPreview(URL.createObjectURL(file));
+    setWeek3DetectResultImage(null);
+    setWeek3Detections([]);
+    setWeek3DetectError(null);
+  };
+
+  const runWeek3Detection = async () => {
+    if (!week3DetectFile) return;
+    setWeek3Detecting(true);
+    setWeek3DetectError(null);
+    setWeek3DetectResultImage(null);
+    setWeek3Detections([]);
+    try {
+      const formData = new FormData();
+      formData.append("image", week3DetectFile);
+      formData.append("conf", String(week3Conf));
+      const res = await fetch(`${WEEK3_API}/week3/detect`, { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Detection failed");
+      }
+      const data = await res.json();
+      setWeek3DetectResultImage(data.result_image_data);
+      setWeek3Detections(data.detections ?? []);
+    } catch (err) {
+      setWeek3DetectError(err.message || "Detection request failed");
+    } finally {
+      setWeek3Detecting(false);
+    }
+  };
+
   const currentImage = images[imageIdx];
   const currentName = currentImage?.name;
 
@@ -357,14 +457,14 @@ function App() {
       return;
     }
 
-    const nextBox = { 
-      coords: [x1, y1, x2, y2], 
+    const nextBox = {
+      coords: [x1, y1, x2, y2],
       label: selectedBoxLabel,
       color: BOX_COLOR_MAP[selectedBoxLabel] ?? "#0f766e",
-      text: ""
+      text: "",
     };
     setCurrentAnnotation({ boxes: [...currentAnnotation.boxes, nextBox] });
-    setSelectedBoxIdx(currentAnnotation.boxes.length); // Select the new box
+    setSelectedBoxIdx(currentAnnotation.boxes.length);
     setDraftBox(null);
     setStatus(`Added ${selectedBoxLabel} box. Select it to customize properties.`);
   };
@@ -1444,10 +1544,189 @@ function App() {
         </>
       )}
 
-      {(activeWeek === "week3" || activeWeek === "week4" || activeWeek === "week5") && (
+      {activeWeek === "week3" && (
+        <section className="week3-shell panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1.25fr_1fr]">
+            <div className="week3-card">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Live Detection Upload</p>
+                  <h3 className="week3-card-title">Upload a scan for instant bounding boxes</h3>
+                </div>
+                <div className="week3-conf-select">
+                  <span>Confidence</span>
+                  <select value={week3Conf} onChange={(e) => setWeek3Conf(Number(e.target.value))}>
+                    {WEEK3_CONF_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {(opt * 100).toFixed(0)}%
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="week3-upload-grid">
+                <label className="week3-dropzone">
+                  <input type="file" accept="image/*" className="hidden" onChange={handleWeek3FileChange} />
+                  <div>
+                    <p className="week3-drop-title">Drop or choose a foot scan</p>
+                    <p className="week3-drop-sub">JPG or PNG recommended. Output renders with YOLO labels.</p>
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  onClick={runWeek3Detection}
+                  disabled={!week3DetectFile || week3Detecting}
+                  className="week3-action"
+                >
+                  {week3Detecting ? "Detecting..." : "Run Detection"}
+                </button>
+              </div>
+
+              {week3DetectError && <p className="week3-error">{week3DetectError}</p>}
+
+              <div className="week3-preview-grid">
+                <div className="week3-preview-card">
+                  <p>Input Preview</p>
+                  {week3DetectPreview ? (
+                    <img src={week3DetectPreview} alt="upload preview" />
+                  ) : (
+                    <div className="week3-preview-empty">Select an image to preview.</div>
+                  )}
+                </div>
+                <div className="week3-preview-card">
+                  <p>Detection Result</p>
+                  {week3DetectResultImage ? (
+                    <img src={week3DetectResultImage} alt="detection result" />
+                  ) : (
+                    <div className="week3-preview-empty">Run detection to render boxes.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="week3-card week3-metrics">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Evaluation Metrics</p>
+                  <h3 className="week3-card-title">mAP, precision, recall snapshots</h3>
+                </div>
+              </div>
+              <div className="week3-metric-list">
+                {week3Metrics.map((row) => {
+                  const precision = Number(row.precision) * 100;
+                  const recall = Number(row.recall) * 100;
+                  const map50 = Number(row.mAP50) * 100;
+                  const map5095 = Number(row["mAP50-95"]) * 100;
+                  const score = (precision + recall) / 2;
+                  return (
+                    <div key={row.split} className="week3-metric">
+                      <div>
+                        <p className="week3-metric-title">{row.split.toUpperCase()}</p>
+                        <p className="week3-metric-score">{score.toFixed(1)}%</p>
+                        <p className="week3-metric-meta">Detection Score</p>
+                      </div>
+                      <div className="week3-metric-details">
+                        <p>mAP50: <b>{map50.toFixed(1)}%</b></p>
+                        <p>mAP50-95: <b>{map5095.toFixed(1)}%</b></p>
+                        <p>Precision: <b>{precision.toFixed(1)}%</b></p>
+                        <p>Recall: <b>{recall.toFixed(1)}%</b></p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!week3Metrics.length && (
+                  <div className="week3-metric week3-metric-empty">
+                    Metrics not loaded. Start Week 3 backend: <code>python week3/app_server.py</code>.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="week3-card">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Detections List</p>
+                  <h3 className="week3-card-title">Object-level breakdown</h3>
+                </div>
+                <span className="week3-pill week3-pill-neutral">{week3Detections.length} objects</span>
+              </div>
+              {!!week3Detections.length ? (
+                <div className="week3-detection-list">
+                  {week3Detections.map((d, i) => (
+                    <div
+                      key={`${d.label}-${i}`}
+                      className="week3-detection-row"
+                      style={{ borderLeftColor: BOX_COLOR_MAP[d.label] ?? "#0f766e" }}
+                    >
+                      <div>
+                        <p className="week3-detection-label">{d.label}</p>
+                        <p className="week3-detection-meta">Box: {d.bbox_xyxy.join(", ")}</p>
+                      </div>
+                      <span className="week3-detection-score">{(Number(d.confidence) * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="week3-empty">No detections yet. Upload an image and run detection.</div>
+              )}
+            </div>
+
+            <div className="week3-card">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Evaluation Graphs</p>
+                  <h3 className="week3-card-title">Precision / recall curves + confusion matrices</h3>
+                </div>
+              </div>
+              <div className="week3-graph-columns">
+                <div>
+                  <p className="week3-graph-title">Eval Val</p>
+                  <div className="week3-graph-grid">
+                    {week3Graphs.eval_val.map((src) => (
+                      <img key={src} src={src} alt="eval val chart" />
+                    ))}
+                    {!week3Graphs.eval_val.length && <div className="week3-preview-empty">No graphs loaded.</div>}
+                  </div>
+                </div>
+                <div>
+                  <p className="week3-graph-title">Eval Test</p>
+                  <div className="week3-graph-grid">
+                    {week3Graphs.eval_test.map((src) => (
+                      <img key={src} src={src} alt="eval test chart" />
+                    ))}
+                    {!week3Graphs.eval_test.length && <div className="week3-preview-empty">No graphs loaded.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 week3-card">
+            <div className="week3-card-header">
+              <div>
+                <p className="week3-card-eyebrow">Prediction Gallery</p>
+                <h3 className="week3-card-title">Latest inference snapshots</h3>
+              </div>
+              <span className="week3-pill week3-pill-neutral">{week3Predictions.length} images</span>
+            </div>
+            <div className="week3-gallery">
+              {week3Predictions.map((src) => (
+                <img key={src} src={src} alt="week3 prediction" />
+              ))}
+            </div>
+            {!week3Predictions.length && <div className="week3-empty">No prediction preview assets available yet.</div>}
+          </div>
+        </section>
+      )}
+
+      {(activeWeek === "week4" || activeWeek === "week5") && (
         <section className="panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
           <h2 className="font-display text-2xl text-ink">
-            {activeWeek === "week3" ? "Week 3: Object Detection" : activeWeek === "week4" ? "Week 4: Segmentation + Paper" : "Week 5: Final Evaluation"}
+            {activeWeek === "week4" ? "Week 4: Segmentation + Paper" : "Week 5: Final Evaluation"}
           </h2>
           <p className="mt-2 text-sm text-stone-700">
             {activeWeek === "week4"

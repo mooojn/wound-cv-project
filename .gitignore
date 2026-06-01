@@ -15,3 +15,5 @@ week3/results/eval_*/
 week3/results/val_*/
 runs/
 *.jpg
+week4/paper/*
+!week4/paper/*.pdf

@@ -31,7 +31,7 @@ week3/
 
 ## ⚙️ Hardware Profile & Hyperparameters
 Optimized to execute reliably on workstations (e.g. GTX 1650 Ti GPU or standard multicore CPU):
-* **Model Backbone:** `yolov8n.pt` (Ultralytics YOLOv8 Nano)
+* **Model Backbone:** `week3/weights/pretrained/yolov8n.pt` (Ultralytics YOLOv8 Nano)
 * **Image Size (`imgsz`):** `512px` (optimal resolution/performance ratio)
 * **Batch Size:** `8` (reduced memory footprint to prevent CUDA OOM)
 * **AMP (Automatic Mixed Precision):** Enabled (`amp=True`)
@@ -64,7 +64,7 @@ If you prefer to run the pipeline stages individually:
   ```
 
 * **Step B: Train YOLOv8 Model**
-  Initiates transfer learning from `yolov8n.pt` using local data configuration:
+  Initiates transfer learning from `week3/weights/pretrained/yolov8n.pt` using local data configuration:
   ```bash
   python week3/scripts/train_detection.py --device auto --name wound_detection_cpu
   ```

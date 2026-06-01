@@ -7,7 +7,8 @@ from ultralytics import YOLO
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train YOLOv8 wound detection model")
-    parser.add_argument("--model", default="yolov8n.pt", help="Base YOLOv8 model weights")
+    default_model = Path(__file__).resolve().parents[1] / "weights" / "pretrained" / "yolov8n.pt"
+    parser.add_argument("--model", default=str(default_model), help="Base YOLOv8 model weights")
     parser.add_argument("--imgsz", type=int, default=512, help="Training image size")
     parser.add_argument("--epochs", type=int, default=60, help="Number of training epochs")
     parser.add_argument("--batch", type=int, default=8, help="Batch size")

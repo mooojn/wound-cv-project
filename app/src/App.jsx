@@ -39,7 +39,7 @@ function App() {
     { key: "week1", label: "Week 1", topic: "Dataset + Annotator", state: "complete" },
     { key: "week2", label: "Week 2", topic: "Annotation + Classification", state: "complete" },
     { key: "week3", label: "Week 3", topic: "Object Detection", state: "complete" },
-    { key: "week4", label: "Week 4", topic: "Segmentation + Paper", state: "active" },
+    { key: "week4", label: "Week 4", topic: "Segmentation + Paper", state: "complete" },
     { key: "week5", label: "Week 5", topic: "Final Evaluation + Video", state: "coming_soon" },
   ];
   const [activeWeek, setActiveWeek] = useState("week4");
@@ -84,6 +84,35 @@ function App() {
   const [week3Conf, setWeek3Conf] = useState(0.25);
   const WEEK3_CONF_OPTIONS = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5];
   const WEEK3_API = "http://127.0.0.1:5001";
+  const [week4Health, setWeek4Health] = useState(null);
+  const [week4HealthError, setWeek4HealthError] = useState(null);
+  const [week4Metrics, setWeek4Metrics] = useState(null);
+  const [week4File, setWeek4File] = useState(null);
+  const [week4Preview, setWeek4Preview] = useState(null);
+  const [week4Result, setWeek4Result] = useState(null);
+  const [week4Error, setWeek4Error] = useState(null);
+  const [week4Segmenting, setWeek4Segmenting] = useState(false);
+  const WEEK4_API = "http://127.0.0.1:5002";
+  const WEEK4_METRIC_LABELS = {
+    iou: "IoU",
+    dice: "Dice",
+    pixel_acc: "Pixel Accuracy",
+    precision: "Precision",
+    recall: "Recall",
+  };
+  const WEEK4_CHART_ASSETS = [
+    {
+      title: "Training Curves",
+      src: `${WEEK4_API}/week4/assets/metrics/training_curves.png`,
+      alt: "Week 4 training curves",
+    },
+    {
+      title: "Evaluation Metrics",
+      src: `${WEEK4_API}/week4/assets/metrics/evaluation_metrics_chart.png`,
+      alt: "Week 4 evaluation metrics chart",
+    },
+  ];
+  const WEEK4_PREDICTION_GRID = `${WEEK4_API}/week4/assets/predictions/prediction_grid.png`;
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -366,6 +395,69 @@ function App() {
       setWeek3DetectError(err.message || "Detection request failed");
     } finally {
       setWeek3Detecting(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadWeek4Assets = async () => {
+      try {
+        const [healthRes, metricsRes] = await Promise.allSettled([
+          fetch(`${WEEK4_API}/week4/health`),
+          fetch(`${WEEK4_API}/week4/results`),
+        ]);
+
+        if (healthRes.status === "fulfilled" && healthRes.value.ok) {
+          const health = await healthRes.value.json();
+          setWeek4Health(health);
+          setWeek4HealthError(null);
+        } else {
+          setWeek4Health(null);
+          setWeek4HealthError("Week 4 backend offline");
+        }
+
+        if (metricsRes.status === "fulfilled" && metricsRes.value.ok) {
+          const results = await metricsRes.value.json();
+          setWeek4Metrics(results.metrics ?? null);
+        }
+      } catch (err) {
+        console.error("Week 4 backend not reachable:", err);
+        setWeek4Health(null);
+        setWeek4HealthError("Week 4 backend offline");
+      }
+    };
+    loadWeek4Assets();
+  }, [WEEK4_API]);
+
+  const handleWeek4FileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setWeek4File(file);
+    if (week4Preview) URL.revokeObjectURL(week4Preview);
+    setWeek4Preview(URL.createObjectURL(file));
+    setWeek4Result(null);
+    setWeek4Error(null);
+  };
+
+  const runWeek4Segmentation = async () => {
+    if (!week4File) return;
+    setWeek4Segmenting(true);
+    setWeek4Error(null);
+    setWeek4Result(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", week4File);
+      const res = await fetch(`${WEEK4_API}/week4/segment`, { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Segmentation failed");
+      }
+      const data = await res.json();
+      setWeek4Result(data);
+    } catch (err) {
+      setWeek4Error(err.message || "Segmentation request failed");
+    } finally {
+      setWeek4Segmenting(false);
     }
   };
 
@@ -1723,15 +1815,205 @@ function App() {
         </section>
       )}
 
-      {(activeWeek === "week4" || activeWeek === "week5") && (
+      {activeWeek === "week4" && (
+        <section className="week3-shell panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
+          <div className="week3-hero p-6">
+            <div className="week3-hero-content">
+              <p className="week3-eyebrow">Week 4 Segmentation</p>
+              <h2 className="week3-title">U-Net wound mask inference</h2>
+              <p className="week3-subtitle">
+                Upload a clinical foot image and run the trained ResNet-34 U-Net model for pixel-level wound segmentation.
+              </p>
+              <div className="week3-hero-badges">
+                <span className="week3-pill week3-pill-online">Complete</span>
+                <span className={week4Health?.status === "ok" ? "week3-pill week3-pill-online" : "week3-pill week3-pill-warn"}>
+                  {week4Health?.status === "ok" ? "API Online" : week4HealthError || "API Offline"}
+                </span>
+                <span className="week3-pill week3-pill-neutral">Port 5002</span>
+              </div>
+            </div>
+
+            <div className="week3-hero-panel">
+              <div className="week3-stat">
+                <p className="week3-stat-label">Architecture</p>
+                <p className="week3-stat-value text-[1.35rem]">U-Net</p>
+                <p className="week3-stat-meta">ResNet-34 encoder</p>
+              </div>
+              <div className="week3-stat">
+                <p className="week3-stat-label">Test Samples</p>
+                <p className="week3-stat-value">{week4Metrics?.test_samples ?? "401"}</p>
+                <p className="week3-stat-meta">Held-out split</p>
+              </div>
+              <div className="week3-stat">
+                <p className="week3-stat-label">Input Size</p>
+                <p className="week3-stat-value text-[1.35rem]">256 x 256</p>
+                <p className="week3-stat-meta">Binary wound mask</p>
+              </div>
+              <div className="week3-health-card">
+                <div className="week3-health-header">
+                  <span>Model Health</span>
+                  <span className={week4Health?.weights_exists ? "week3-pill week3-pill-online" : "week3-pill week3-pill-warn"}>
+                    {week4Health?.weights_exists ? "Weights Ready" : "Start Backend"}
+                  </span>
+                </div>
+                <p className="week3-health-label">Run command</p>
+                <p className="week3-health-path">python week4/app_server.py</p>
+                <p className="week3-health-note">
+                  Device: {week4Health?.device ?? "unavailable"} | Metrics: {week4Health?.metrics_exists ? "ready" : "not loaded"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="week3-card">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Live Segmentation Upload</p>
+                  <h3 className="week3-card-title">Generate mask and overlay</h3>
+                </div>
+                {week4Result && <span className="week3-pill week3-pill-neutral">{week4Result.threshold} threshold</span>}
+              </div>
+
+              <div className="week3-upload-grid">
+                <label className="week3-dropzone">
+                  <input type="file" accept="image/*" className="hidden" onChange={handleWeek4FileChange} />
+                  <div>
+                    <p className="week3-drop-title">Drop or choose a wound image</p>
+                    <p className="week3-drop-sub">The backend returns an overlay, binary mask, coverage, and mean confidence.</p>
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  onClick={runWeek4Segmentation}
+                  disabled={!week4File || week4Segmenting}
+                  className="week3-action"
+                >
+                  {week4Segmenting ? "Segmenting..." : "Run Segmentation"}
+                </button>
+              </div>
+
+              {week4Error && <p className="week3-error">{week4Error}</p>}
+
+              <div className="week3-preview-grid">
+                <div className="week3-preview-card">
+                  <p>Input Preview</p>
+                  {week4Preview ? (
+                    <img src={week4Preview} alt="week4 upload preview" />
+                  ) : (
+                    <div className="week3-preview-empty">Select an image to preview.</div>
+                  )}
+                </div>
+                <div className="week3-preview-card">
+                  <p>Segmentation Overlay</p>
+                  {week4Result?.overlay_b64 ? (
+                    <img src={`data:image/png;base64,${week4Result.overlay_b64}`} alt="segmentation overlay" />
+                  ) : (
+                    <div className="week3-preview-empty">Run segmentation to render the overlay.</div>
+                  )}
+                </div>
+                <div className="week3-preview-card">
+                  <p>Binary Mask</p>
+                  {week4Result?.mask_b64 ? (
+                    <img src={`data:image/png;base64,${week4Result.mask_b64}`} alt="segmentation mask" />
+                  ) : (
+                    <div className="week3-preview-empty">The mask appears after inference.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="week3-card">
+              <div className="week3-card-header">
+                <div>
+                  <p className="week3-card-eyebrow">Segmentation Metrics</p>
+                  <h3 className="week3-card-title">Test-set pixel performance</h3>
+                </div>
+              </div>
+              <div className="week3-metric-list">
+                {week4Metrics ? (
+                  Object.entries(WEEK4_METRIC_LABELS).map(([key, label]) => (
+                    <div key={key} className="week3-metric">
+                      <div>
+                        <p className="week3-metric-title">{label}</p>
+                        <p className="week3-metric-score">{(Number(week4Metrics[key]) * 100).toFixed(1)}%</p>
+                        <p className="week3-metric-meta">Threshold {week4Metrics.threshold}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="week3-metric week3-metric-empty">
+                    Metrics not loaded. Start Week 4 backend: <code>python week4/app_server.py</code>.
+                  </div>
+                )}
+              </div>
+              {week4Result && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="week3-stat">
+                    <p className="week3-stat-label">Wound Coverage</p>
+                    <p className="week3-stat-value">{week4Result.wound_coverage}%</p>
+                    <p className="week3-stat-meta">Predicted image area</p>
+                  </div>
+                  <div className="week3-stat">
+                    <p className="week3-stat-label">Mean Confidence</p>
+                    <p className="week3-stat-value">{week4Result.mean_confidence}%</p>
+                    <p className="week3-stat-meta">Average mask probability</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 week3-card">
+            <div className="week3-card-header">
+              <div>
+                <p className="week3-card-eyebrow">Metric Graphs</p>
+                <h3 className="week3-card-title">Training curves and evaluation chart</h3>
+              </div>
+              <span className="week3-pill week3-pill-neutral">{WEEK4_CHART_ASSETS.length} charts</span>
+            </div>
+            <div className="week4-chart-grid">
+              {WEEK4_CHART_ASSETS.map((asset) => (
+                <div key={asset.src}>
+                  <p className="week3-graph-title">{asset.title}</p>
+                  <div className="week4-chart-frame">
+                    <img src={asset.src} alt={asset.alt} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!week4Health && (
+              <div className="week3-empty mt-4">
+                Start Week 4 backend to load graph images: <code>python week4/app_server.py</code>.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 week3-card">
+            <div className="week3-card-header">
+              <div>
+                <p className="week3-card-eyebrow">Prediction Grid</p>
+                <h3 className="week3-card-title">Test prediction visualisations</h3>
+              </div>
+              <span className="week3-pill week3-pill-neutral">Large asset</span>
+            </div>
+            <div className="week4-prediction-frame">
+              <img src={WEEK4_PREDICTION_GRID} alt="Week 4 prediction grid" />
+            </div>
+            {!week4Health && (
+              <div className="week3-empty mt-4">
+                Start Week 4 backend to load prediction images: <code>python week4/app_server.py</code>.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {activeWeek === "week5" && (
         <section className="panel mb-5 rounded-3xl border border-clay bg-card p-6 shadow-soft">
-          <h2 className="font-display text-2xl text-ink">
-            {activeWeek === "week4" ? "Week 4: Segmentation + Paper" : "Week 5: Final Evaluation"}
-          </h2>
+          <h2 className="font-display text-2xl text-ink">Week 5: Final Evaluation</h2>
           <p className="mt-2 text-sm text-stone-700">
-            {activeWeek === "week4"
-              ? "This module is in progress. Add segmentation training, metrics, and paper artifacts next."
-              : "This module is coming soon. You can keep preparing data and annotation quality now."}
+            This module is coming soon. You can keep preparing data and annotation quality now.
           </p>
         </section>
       )}

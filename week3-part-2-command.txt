@@ -1,3 +1,0 @@
-activate venv then
-
-python week3\scripts\train_detection.py --device cpu --name wound_detection_cpu

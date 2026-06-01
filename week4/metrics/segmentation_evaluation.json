@@ -1,0 +1,10 @@
+{
+    "test_samples": 401,
+    "threshold": 0.5,
+    "model_weights": "week4\\weights\\best_seg_model.pth",
+    "iou": 0.5030773035376083,
+    "dice": 0.66939644734649,
+    "pixel_acc": 0.9267501260277007,
+    "precision": 0.6626232870377701,
+    "recall": 0.6763095045575361
+}
